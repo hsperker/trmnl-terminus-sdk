@@ -101,3 +101,29 @@ Use matching short values for `API_ACCESS_TOKEN_PERIOD`,
 `TERMINUS_REFRESH_WAIT_SECONDS` long enough to enter the SDK's two-second refresh
 window. Record the tag, commit, image identifier if used, and smoke result in the
 release evidence. Never record credentials or tokens.
+
+### Terminus 0.71.0 release proof
+
+On 2026-09-08, the upstream `0.71.0` tag independently resolved to commit
+`e0cf90d8ef6d7bc16dfbac8ebab910a9fda9de56`. The official image was
+`ghcr.io/usetrmnl/terminus:0.71.0` with canonical multi-platform index digest
+`sha256:18b672e4958a5a274822b6e34e76b92bcd0a8b483b7728fa559d4fab342262c7`;
+the exercised ARM64 manifest digest was
+`sha256:a5e2f322ea30fbaa5c2630ae02dcbaa6bfc44d889d92228050f4df8d7bb0c462`.
+The image labels reported the same version and commit.
+
+The proof used a uniquely named disposable project, fresh PostgreSQL and Valkey
+volumes, and a localhost-only web binding. The first account was created through
+the CSRF-protected `/register` form, and the SDK returned at least one synchronized
+model. `API_ACCESS_TOKEN_PERIOD`, `SESSION_LIFETIME_LIMIT`, and
+`SESSION_INACTIVITY_LIMIT` were each 60 seconds. With a 49.2-second refresh wait
+and the runner's two-second skew, the unchanged smoke runner reported
+`PASS: real screen, image, playlist, and cleanup` after requiring both access and
+refresh token values to change.
+
+That run covered HTML-screen rendering, a non-empty rendered-image download,
+screen list readback, ordered playlist replacement and readback, and deletion of
+the created screen and playlist. A separate clean-stack pass followed cleanup
+with an API check and found no matching smoke resources. Final host-side
+inspection found zero project containers, networks, volumes, or temporary runtime
+files.
