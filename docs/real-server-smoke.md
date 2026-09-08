@@ -19,6 +19,38 @@ The runner prints no configured URL, email, password, or tokens. It gives every
 resource a random suffix and deletes all created resources even when an assertion
 fails. Cleanup failure makes the run fail.
 
+## Physical-device proof
+
+The guarded device runner temporarily assigns its own playlist and screen to one
+existing device, waits for visual confirmation, then restores the device's original
+playlist assignment:
+
+```sh
+export TERMINUS_BASE_URL='https://terminus.example.test'
+export TERMINUS_EMAIL='device-proof-user@example.test'
+read -rs TERMINUS_PASSWORD
+export TERMINUS_PASSWORD
+export TERMINUS_DEVICE_ID=123
+export TERMINUS_ALLOW_DEVICE_MUTATIONS=1
+uv run python scripts/run_device_smoke.py
+```
+
+Use a positive device ID for a device that already has a playlist. An unassigned
+device cannot be used because SDK v0.1 intentionally cannot restore
+`playlist_id: null`.
+
+Playlist assignment does not wake a physical device. When the runner says the
+temporary display is assigned, use the device's normal manual refresh or power-cycle
+action. Type `seen` only after the device visibly shows the heading
+`SDK DEVICE PROOF`; the prompt times out after ten minutes.
+
+The runner restores the original assignment and verifies it before deleting the
+temporary playlist and screen. Any proof, restoration, or cleanup failure makes the
+run fail. If restoration cannot be verified, deletion is skipped and the uniquely
+SDK-prefixed resources remain for manual recovery. The runner does not print
+configuration values, resource identifiers, labels, HTML, device details, response
+bodies, passwords, or tokens.
+
 ## Latest developer evidence
 
 On 2026-09-08, the automated smoke passed against Terminus commit
