@@ -155,4 +155,3 @@ class Playlist(_ResponseModel):
     created_at: datetime
     updated_at: datetime
     items: list[PlaylistItem]
-

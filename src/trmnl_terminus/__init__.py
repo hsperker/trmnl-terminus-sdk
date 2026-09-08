@@ -1,3 +1,4 @@
+from .client import TerminusClient
 from .models import (
     Credentials,
     HtmlSource,
@@ -22,6 +23,7 @@ __all__ = [
     "PlaylistPatch",
     "Screen",
     "ScreenCreate",
+    "TerminusClient",
     "TokenPair",
     "TokenStore",
 ]
