@@ -69,13 +69,8 @@ def test_login_uses_raw_authorization_and_does_not_retain_cookie() -> None:
 
 
 @respx.mock
-def test_401_recovers_once_and_replays_post_once() -> None:
-    playlists = respx.post(f"{BASE_URL}/api/playlists").mock(
-        side_effect=[
-            httpx.Response(401),
-            httpx.Response(200, json={"data": {"id": 4}}),
-        ]
-    )
+def test_401_recovers_but_does_not_replay_post() -> None:
+    playlists = respx.post(f"{BASE_URL}/api/playlists").mock(return_value=httpx.Response(401))
     refresh = respx.post(f"{BASE_URL}/api/jwt").mock(return_value=httpx.Response(401))
     login = respx.post(f"{BASE_URL}/login").mock(
         return_value=httpx.Response(
@@ -83,20 +78,25 @@ def test_401_recovers_once_and_replays_post_once() -> None:
             json={"access_token": "fresh-access", "refresh_token": "fresh-refresh"},
         )
     )
+    models = respx.get(f"{BASE_URL}/api/models").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
 
     with TerminusClient(
         BASE_URL,
         credentials=Credentials(email="user@example.test", password="secret"),
         tokens=TokenPair(access_token="rejected", refresh_token="stale"),
     ) as client:
-        response = client.request("POST", "/api/playlists", json={"playlist": {}})
+        with pytest.raises(TerminusAuthenticationError):
+            client.request("POST", "/api/playlists", json={"playlist": {}})
+        response = client.request("GET", "/api/models")
 
     assert response.status_code == 200
-    assert playlists.call_count == 2
+    assert playlists.call_count == 1
     assert refresh.call_count == 1
     assert login.call_count == 1
     assert playlists.calls[0].request.headers["Authorization"] == "rejected"
-    assert playlists.calls[1].request.headers["Authorization"] == "fresh-access"
+    assert models.calls[0].request.headers["Authorization"] == "fresh-access"
 
 
 @respx.mock

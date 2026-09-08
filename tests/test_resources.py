@@ -128,21 +128,21 @@ def test_screen_create_wraps_exact_payload() -> None:
 
 
 @respx.mock
-def test_screen_get_and_delete_use_native_show_route() -> None:
-    show = respx.get(f"{BASE_URL}/api/screens/11").mock(
-        return_value=httpx.Response(200, json={"data": SCREEN})
+def test_screen_list_and_delete_use_native_routes() -> None:
+    listing = respx.get(f"{BASE_URL}/api/screens").mock(
+        return_value=httpx.Response(200, json={"data": [SCREEN]})
     )
     delete = respx.delete(f"{BASE_URL}/api/screens/11").mock(
         return_value=httpx.Response(200, json={"data": SCREEN})
     )
 
     with _client() as client:
-        fetched = client.screens.get(11)
+        screens = client.screens.list()
         deleted = client.screens.delete(11)
 
-    assert fetched.id == 11
+    assert [screen.id for screen in screens] == [11]
     assert deleted is not None and deleted.id == 11
-    assert show.call_count == 1
+    assert listing.call_count == 1
     assert delete.call_count == 1
 
 
@@ -222,7 +222,7 @@ def test_invalid_list_envelopes_fail_loudly(response: httpx.Response, message: s
 
 @respx.mock
 def test_not_found_maps_to_specific_error() -> None:
-    respx.get(f"{BASE_URL}/api/screens/99").mock(
+    respx.get(f"{BASE_URL}/api/playlists/99").mock(
         return_value=httpx.Response(
             404,
             json={"type": "about:blank", "status": 404, "title": "Not Found"},
@@ -230,7 +230,7 @@ def test_not_found_maps_to_specific_error() -> None:
     )
 
     with _client() as client, pytest.raises(TerminusNotFoundError) as caught:
-        client.screens.get(99)
+        client.playlists.get(99)
 
     assert caught.value.status_code == 404
 

@@ -30,22 +30,20 @@ The default developer run proves:
 - login and raw-token authorization;
 - model listing;
 - playlist and HTML-screen creation;
-- native screen retrieval;
+- screen-list readback of the created resource;
 - a real rendered-image download;
 - ordered playlist replacement and readback;
-- one stale-token POST recovery with exactly one created resource;
 - cleanup.
 
 Set `TERMINUS_REFRESH_WAIT_SECONDS` only when the server has a short access-token
 lifetime. The runner then waits, makes another request, and requires both access
 and refresh tokens to rotate.
 
-To prepare the POST-recovery proof, the runner rotates the current token pair by
-calling the refresh endpoint through the raw public client and deliberately does
-not install the returned pair. The next playlist POST must be rejected before
-its handler, recover through login, and create one resource. A malformed fake
-JWT is not used because Terminus correctly reports malformed JWTs as bad
-requests, not expired authentication.
+Mutation replay is intentionally absent. Terminus 0.71.0 can keep a previously
+issued access token valid after refresh, and without session expiration that
+token is long-lived. The SDK recovers after a mutating 401 but leaves any retry
+to the caller because the server-side conditions for safe automatic replay
+cannot be proven.
 
 ## Release evidence
 

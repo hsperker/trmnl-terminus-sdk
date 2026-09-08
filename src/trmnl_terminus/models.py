@@ -115,7 +115,7 @@ class Model(_ResponseModel):
     offset_x: int
     offset_y: int
     scale_factor: float
-    css: dict[str, Any]
+    css: dict[str, Any] | None
     width: int
     height: int
     created_at: datetime

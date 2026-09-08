@@ -127,6 +127,11 @@ class TerminusClient:
             return response
 
         self._refresh_or_login()
+        if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            raise TerminusAuthenticationError(
+                "authentication recovered; mutating request was not replayed",
+                response=response,
+            )
         return self._send_with_current_token(method, path, options)
 
     def _send_with_current_token(

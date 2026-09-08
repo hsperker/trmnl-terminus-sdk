@@ -73,14 +73,17 @@ def main() -> int:
     playlist_ids: list[int] = []
     screen_ids: list[int] = []
     failure: BaseException | None = None
+    failure_stage = "setup"
     cleanup_failures: list[str] = []
 
     try:
         suffix = secrets.token_hex(6)
+        failure_stage = "models.list"
         models = client.models.list()
         if not models:
             raise SmokeFailure("Terminus has no usable model")
 
+        failure_stage = "playlist.create"
         playlist = client.playlists.create(
             PlaylistCreate(
                 name=f"sdk_smoke_{suffix}",
@@ -89,6 +92,7 @@ def main() -> int:
         )
         playlist_ids.append(playlist.id)
 
+        failure_stage = "screen.create"
         screen = client.screens.create(
             ScreenCreate(
                 model_id=models[0].id,
@@ -104,16 +108,20 @@ def main() -> int:
         )
         screen_ids.append(screen.id)
 
-        fetched = client.screens.get(screen.id)
-        if fetched.id != screen.id:
-            raise SmokeFailure("screen show returned the wrong resource")
+        failure_stage = "screen.list-readback"
+        matching_screens = [item for item in client.screens.list() if item.id == screen.id]
+        if len(matching_screens) != 1:
+            raise SmokeFailure("screen list did not return exactly the created resource")
+        fetched = matching_screens[0]
 
         with tempfile.TemporaryDirectory(prefix="terminus-sdk-smoke-") as directory:
             destination = Path(directory) / "rendered-image"
+            failure_stage = "screen.download"
             client.screens.download(fetched, destination)
             if not destination.read_bytes():
                 raise SmokeFailure("rendered image was empty")
 
+        failure_stage = "playlist.update"
         updated = client.playlists.update(
             playlist.id,
             PlaylistPatch(
@@ -124,32 +132,13 @@ def main() -> int:
         )
         if [item.screen_id for item in updated.items] != [screen.id]:
             raise SmokeFailure("playlist update did not preserve screen order")
+        failure_stage = "playlist.get"
         fetched_playlist = client.playlists.get(playlist.id)
         if [item.screen_id for item in fetched_playlist.items] != [screen.id]:
             raise SmokeFailure("playlist read did not preserve screen order")
 
+        failure_stage = "auth.refresh"
         _prove_refresh_when_requested(client, store)
-        if store.current is None:
-            raise SmokeFailure("login did not publish a token pair to TokenStore")
-
-        saves_before_recovery = store.saves
-        rotated_out_of_band = client.request(
-            "POST",
-            "/api/jwt",
-            json={"refresh_token": store.current.refresh_token.get_secret_value()},
-        )
-        if not rotated_out_of_band.is_success:
-            raise SmokeFailure("could not prepare stale-token recovery proof")
-        recovery_name = f"sdk_recovery_{suffix}"
-        recovered = client.playlists.create(
-            PlaylistCreate(name=recovery_name, label=f"SDK Recovery {suffix}")
-        )
-        playlist_ids.append(recovered.id)
-        if store.saves <= saves_before_recovery:
-            raise SmokeFailure("the server accepted a stale token; 401 recovery was not exercised")
-        matches = [item for item in client.playlists.list() if item.name == recovery_name]
-        if [item.id for item in matches] != [recovered.id]:
-            raise SmokeFailure("rejected-auth POST did not create exactly one resource")
     except BaseException as error:
         failure = error
     finally:
@@ -166,13 +155,13 @@ def main() -> int:
         client.close()
 
     if failure is not None:
-        print(_safe_failure(failure), file=sys.stderr)
+        print(_safe_failure(failure, failure_stage), file=sys.stderr)
     if cleanup_failures:
         print(f"Cleanup failed: {', '.join(cleanup_failures)}", file=sys.stderr)
     if failure is not None or cleanup_failures:
         return 1
 
-    print("PASS: real screen, image, playlist, auth recovery, and cleanup")
+    print("PASS: real screen, image, playlist, and cleanup")
     return 0
 
 
@@ -205,10 +194,10 @@ def _prove_refresh_when_requested(
         raise SmokeFailure("refresh token did not rotate")
 
 
-def _safe_failure(error: BaseException) -> str:
+def _safe_failure(error: BaseException, stage: str) -> str:
     if isinstance(error, TerminusResponseError):
-        return f"Smoke failed: {type(error).__name__} status={error.status_code}"
-    return f"Smoke failed: {type(error).__name__}"
+        return f"Smoke failed at {stage}: {type(error).__name__} status={error.status_code}"
+    return f"Smoke failed at {stage}: {type(error).__name__}"
 
 
 if __name__ == "__main__":

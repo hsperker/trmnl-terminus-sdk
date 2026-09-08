@@ -112,11 +112,11 @@ Validate a root-only HTTP(S) base URL. Construct one `httpx.Client` with redirec
 
 - [ ] **Step 4: Add failing bounded-recovery tests**
 
-Cover one 401 followed by login and one replay, a second 401 that raises, no replay for 5xx or transport failure, and complete token replacement after refresh. For a POST recovery test, assert the mock receives exactly two POSTs: one rejected before handling and one accepted after authentication.
+Cover one 401 followed by login and one safe-read replay, a second 401 that raises, no mutation replay, no retry for 5xx or transport failure, and complete token replacement after refresh.
 
 - [ ] **Step 5: Implement bounded refresh and replay**
 
-Decode JWT `exp` without signature verification only as a scheduling hint. Refresh once when near expiry. On rejected refresh, log in once only when credentials exist. Replay an original 401 once. Preserve new tokens in memory before invoking `TokenStore.save`; block later network access while a rotated pair remains unpersisted.
+Decode JWT `exp` without signature verification only as a scheduling hint. Refresh once when near expiry. On rejected refresh, log in once only when credentials exist. Replay an original 401 once for safe reads; recover but do not replay mutations. Preserve new tokens in memory before invoking `TokenStore.save`; block later network access while a rotated pair remains unpersisted.
 
 - [ ] **Step 6: Run transport tests and static checks**
 
@@ -136,7 +136,7 @@ Commit the client, errors, exports, and tests with `feat: add authenticated Term
 
 **Interfaces:**
 - Consumes: `TerminusClient.request` and vertical-slice models.
-- Produces: `client.models.list()`, `client.screens.create/get/delete/read_bytes/download`, and `client.playlists.create/get/list/update/delete`.
+- Produces: `client.models.list()`, `client.screens.list/create/delete/read_bytes/download`, and `client.playlists.create/get/list/update/delete`.
 
 - [ ] **Step 1: Write failing manager wire-contract tests**
 
@@ -191,11 +191,16 @@ Exit before network access unless all required variables exist and mutation perm
 
 - [ ] **Step 3: Exercise the public vertical slice**
 
-List models, create a playlist, create self-contained HTML, fetch the screen, download and assert non-empty rendered bytes, attach the screen to the playlist, read the playlist back, and assert item order.
+List models, create a playlist, create self-contained HTML, find the created screen through the screen list, download and assert non-empty rendered bytes, attach the screen to the playlist, read the playlist back, and assert item order.
 
-- [ ] **Step 4: Exercise rejected-auth POST recovery**
+- [ ] **Step 4: Exercise proactive refresh when the server is configured for it**
 
-Capture a valid pair through an in-memory `TokenStore`, rotate it once through a raw public call to `/api/jwt` without installing the returned pair, then create a uniquely named playlist with the stale pair. Require an authentication recovery, and assert by listing that exactly one matching playlist exists. Do not use a malformed fake JWT: Terminus reports malformed tokens as bad requests rather than expired authentication.
+Capture a valid pair through an in-memory `TokenStore`, wait until the access
+token enters the configured refresh window, make a safe authenticated request,
+and require both tokens to rotate. Do this only on a disposable server with
+coordinated short session settings. Mutation non-replay remains a mocked
+contract test because Terminus 0.71.0 cannot invalidate an access token on
+demand for a reliable live test.
 
 - [ ] **Step 5: Document disposable and developer modes**
 

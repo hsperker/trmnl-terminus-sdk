@@ -16,24 +16,23 @@ Python import package: `trmnl_terminus`
 
 ## Compatibility contract
 
-Development uses this exact upstream baseline:
+SDK v0.1 supports this exact upstream release:
 
 ```text
 repository: https://github.com/usetrmnl/terminus
-commit:     ff2809b128d9419b95eab6e45019140148a568b1
-date:       2026-09-07
+tag:        0.71.0
+commit:     e0cf90d8ef6d7bc16dfbac8ebab910a9fda9de56
 ```
 
-This commit contains `GET /api/screens/:id`. Terminus tag `0.71.0`, at commit
-`e0cf90d8ef6d7bc16dfbac8ebab910a9fda9de56`, was the latest published tag when
-this specification was written and did not contain that endpoint. The newer
-commit is a development baseline, not a public compatibility claim.
+Pinning both values gives users a recognizable release and gives tests an
+immutable source revision. Terminus `main` later added `GET /api/screens/:id`,
+but tag `0.71.0` does not contain that route. SDK v0.1 therefore exposes the
+native screen list, create, patch, and delete operations only. Do not synthesize
+`screens.get()` by listing every screen, and do not claim support for an
+unreleased commit merely to expose that convenience method.
 
-Before releasing SDK v0.1, select a published Terminus tag that contains the
-specified API, record both the tag and the immutable commit it resolves to, and
-pass the real-server release smoke test against that source. The initial SDK
-release supports that exact Terminus tag. It makes no blanket claim of
-compatibility with Terminus `main`, older tags, or later tags.
+The SDK makes no blanket claim of compatibility with Terminus `main`, older
+tags, or later tags.
 
 Before changing the SDK's native resource behavior:
 
@@ -46,8 +45,7 @@ Unknown response fields are preserved, but that only covers additive response
 changes. It does not make renamed fields, changed routes, or new request
 requirements compatible.
 
-Authoritative files at the development baseline, and later at the supported
-release tag:
+Authoritative files at the supported release tag:
 
 - `doc/api.adoc`
 - `config/routes.rb`
@@ -269,19 +267,18 @@ When the original authenticated request returns 401:
 
 1. refresh once when a refresh token exists;
 2. if refresh credentials are rejected, log in once when credentials exist;
-3. replay the original request once after successful recovery;
-4. if the replay also returns 401, raise `TerminusAuthenticationError`.
+3. replay the original request once only when its method is `GET`, `HEAD`, or
+   `OPTIONS`;
+4. if a replay also returns 401, raise `TerminusAuthenticationError`;
+5. for every other method, keep the recovered token pair but raise
+   `TerminusAuthenticationError` against the original 401 instead of replaying.
 
-The 401 replay is the only automatic replay of a mutating request. A 401 means
-the request was not accepted for lack of valid credentials. No response other
-than 401 triggers replay. Transport failures, 408, 429, and 5xx responses are
-never retried by v0.1.
-
-This replay rule depends on Terminus rejecting authentication before invoking a
-resource action. Recheck that ordering at every supported tag. The real-server
-smoke test must prove that a rejected first POST creates exactly one resource
-after authentication recovery. If that cannot be proved, do not replay POST or
-PATCH automatically.
+No mutating request is automatically replayed. Terminus 0.71.0 does not provide
+a practical way to invalidate a well-formed access token on demand, so the
+server-side ordering needed to prove mutation replay cannot be verified. A
+caller may inspect the error and retry deliberately. No response other than 401
+triggers authentication recovery. Transport failures, 408, 429, and 5xx
+responses are never retried by v0.1.
 
 There is no background thread or timer. Authentication happens lazily on use.
 
@@ -303,7 +300,6 @@ their attributes under the singular resource name shown in the Payload column.
 | `models.update(id, request)` | `PATCH /api/models/:id` | `{"model": ...}` | `Model` |
 | `models.delete(id)` | `DELETE /api/models/:id` | none | `Model | None` |
 | `screens.list()` | `GET /api/screens` | none | `list[Screen]` |
-| `screens.get(id)` | `GET /api/screens/:id` | none | `Screen` |
 | `screens.create(request)` | `POST /api/screens` | `{"screen": ...}` | `Screen` |
 | `screens.update(id, request)` | `PATCH /api/screens/:id` | `{"screen": ...}` | `Screen` |
 | `screens.delete(id)` | `DELETE /api/screens/:id` | none | `Screen | None` |
@@ -313,8 +309,8 @@ their attributes under the singular resource name shown in the Payload column.
 | `playlists.update(id, request)` | `PATCH /api/playlists/:id` | `{"playlist": ...}` | `Playlist` |
 | `playlists.delete(id)` | `DELETE /api/playlists/:id` | none | `Playlist | None` |
 
-No manager synthesizes a missing native endpoint. In particular,
-`screens.get(id)` uses the real show endpoint.
+No manager synthesizes a missing native endpoint. In particular, v0.1 has no
+`screens.get(id)` because Terminus 0.71.0 has no screen show route.
 
 ### Device
 
@@ -379,8 +375,11 @@ a playlist. It must contain at least one field.
 | `description` | `str | None` |
 | `colors`, `bit_depth`, `rotation`, `offset_x`, `offset_y`, `width`, `height` | `int` |
 | `scale_factor` | `float` |
-| `css` | `dict[str, Any]` |
+| `css` | `dict[str, Any] | None` |
 | `created_at`, `updated_at` | `datetime` |
+
+The response permits `css: null`; this occurs on the deployed Terminus server
+even though model create and patch bodies use an object when `css` is present.
 
 `ModelCreate` requires non-empty `name` and `label`. It may contain:
 
@@ -625,46 +624,47 @@ Mocked HTTP tests must prove:
 6. expired and near-expiry JWTs refresh before the resource request;
 7. refresh-token rejection logs in only when credentials exist;
 8. refresh transport errors and 5xx responses do not trigger login;
-9. a 401 causes at most one recovery and one replay;
+9. a 401 causes at most one recovery; safe reads replay once, while mutations
+   are never replayed automatically;
 10. token persistence failure is loud and retains the new in-memory pair;
 11. no background thread or timer is created;
 12. every manager uses the method, route, wrapper, and response shape in the
     native HTTP contract table;
-13. `screens.get()` uses `GET /api/screens/:id`;
-14. screen source variants serialize exactly as specified and cannot overlap;
-15. screen patch requires a source;
-16. playlist order is preserved, omission preserves items, and an empty list
+13. screen source variants serialize exactly as specified and cannot overlap;
+14. screen patch requires a source;
+15. playlist order is preserved, omission preserves items, and an empty list
     clears them;
-17. playlist update makes one PATCH request and no preliminary GET;
-18. device create accepts `playlist_id=None`, while patch rejects it;
-19. models update with PATCH, not PUT;
-20. unknown response fields and unknown response strings survive decoding;
-21. response envelopes, empty delete results, and malformed responses follow
+16. playlist update makes one PATCH request and no preliminary GET;
+17. device create accepts `playlist_id=None`, while patch rejects it;
+18. models update with PATCH, not PUT;
+19. unknown response fields and unknown response strings survive decoding;
+20. response envelopes, empty delete results, and malformed responses follow
     the specified behavior;
-22. RFC problem data and validation errors remain inspectable;
-23. secret values are absent from models, exceptions, and captured logs;
-24. image downloads never send authorization, reject cross-origin URLs by
+21. RFC problem data and validation errors remain inspectable;
+22. secret values are absent from models, exceptions, and captured logs;
+23. image downloads never send authorization, reject cross-origin URLs by
     default, do not follow redirects, and replace destinations atomically;
-25. raw authenticated requests reject absolute URLs and conflicting auth;
-26. cookies received during login never appear on resource, raw, or download
+24. raw authenticated requests reject absolute URLs and conflicting auth;
+25. cookies received during login never appear on resource, raw, or download
     requests.
 
 ## First implementation checkpoint
 
 Build one end-to-end path before completing the manager matrix. The first
 checkpoint is login, model listing, playlist creation, HTML screen creation,
-screen retrieval, rendered-image download, playlist update, and cleanup against
-a real Terminus server. It may be rough, but it must use the public SDK surface.
+screen-list readback, rendered-image download, playlist update, and cleanup
+against a real Terminus server. It may be rough, but it must use the public SDK
+surface.
 After this path works, fill in the remaining typed operations and mocked edge
 cases. Do not postpone the first real-server run until release preparation.
 
 ## Real-server release smoke test
 
 Mocks do not prove compatibility. A release is blocked until a smoke test passes
-against a disposable Terminus instance built from the proposed supported tag's
-resolved commit.
+against a disposable Terminus instance built from the supported tag's resolved
+commit.
 
-The release workflow must start a clean Terminus instance from the proposed tag
+The release workflow must start a clean Terminus instance from the supported tag
 and resolved commit. Its setup must create the first account through Terminus's
 supported registration flow so the account is verified, and must confirm that
 at least one usable model exists. Keep credentials in environment variables;
@@ -684,15 +684,13 @@ The smoke test must:
 1. log in and list models;
 2. create a uniquely named playlist;
 3. create a self-contained HTML screen using the existing model;
-4. fetch that screen through `GET /api/screens/:id`;
+4. list screens and find exactly the screen just created by its returned ID;
 5. download the real Terminus-rendered image and assert non-empty bytes;
 6. update the playlist with the screen, read it back, and verify order;
 7. allow the access token to enter the refresh window, make another authenticated
    request, and prove that both tokens rotated;
-8. send a playlist-creation POST first with rejected authentication, recover,
-   and prove that exactly one uniquely named playlist was created;
-9. delete all created screens and playlists in `finally` cleanup;
-10. fail the run if cleanup fails.
+8. delete all created screens and playlists in `finally` cleanup;
+9. fail the run if cleanup fails.
 
 The test may be skipped in ordinary local test runs. The release workflow must
 run it with:

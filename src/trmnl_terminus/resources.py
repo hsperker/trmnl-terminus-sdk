@@ -36,17 +36,16 @@ class ScreensManager:
     def __init__(self, client: TerminusClient) -> None:
         self._client = client
 
+    def list(self) -> list[Screen]:
+        response = self._client.request("GET", "/api/screens")
+        return _decode_list(response, Screen)
+
     def create(self, request: ScreenCreate) -> Screen:
         response = self._client.request(
             "POST",
             "/api/screens",
             json={"screen": request.to_payload()},
         )
-        return _decode_one(response, Screen)
-
-    def get(self, screen_id: int) -> Screen:
-        _require_positive_id(screen_id)
-        response = self._client.request("GET", f"/api/screens/{screen_id}")
         return _decode_one(response, Screen)
 
     def delete(self, screen_id: int) -> Screen | None:

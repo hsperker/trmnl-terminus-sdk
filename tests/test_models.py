@@ -77,6 +77,33 @@ def test_response_models_preserve_unknown_fields() -> None:
     assert model.created_at.tzinfo is not None
 
 
+def test_model_accepts_null_css_from_terminus_response() -> None:
+    model = Model.model_validate(
+        {
+            "id": 1,
+            "default_palette_id": None,
+            "name": "og",
+            "label": "OG",
+            "description": None,
+            "kind": "terminus",
+            "mime_type": "image/png",
+            "colors": 2,
+            "bit_depth": 1,
+            "rotation": 0,
+            "offset_x": 0,
+            "offset_y": 0,
+            "scale_factor": 1.0,
+            "css": None,
+            "width": 800,
+            "height": 480,
+            "created_at": "2026-09-08T10:00:00+00:00",
+            "updated_at": "2026-09-08T10:00:00+00:00",
+        }
+    )
+
+    assert model.css is None
+
+
 def test_screen_render_metadata_can_be_absent() -> None:
     screen = Screen.model_validate(
         {
