@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, time
 
 import pytest
-from pydantic import ValidationError
+from pydantic import AwareDatetime, SecretStr, ValidationError
 
 from trmnl_terminus import (
     Credentials,
@@ -50,6 +50,40 @@ DEVICE = {
     "created_at": "2026-09-08T09:00:00+00:00",
     "updated_at": "2026-09-08T10:00:00+00:00",
     "upstream_added": "kept",
+}
+
+DEVICE_FIELD_TYPES = {
+    "id": int,
+    "model_id": int,
+    "playlist_id": int | None,
+    "label": str | None,
+    "mac_address": str | None,
+    "firmware_version": str | None,
+    "wake_reason": str | None,
+    "api_key": SecretStr | None,
+    "firmware_profile": bool,
+    "firmware_update": bool,
+    "firmware_reset": bool,
+    "wifi_band": float,
+    "battery_charge": float,
+    "battery_voltage": float,
+    "wifi_signal": int,
+    "refresh_rate": int,
+    "image_timeout": int,
+    "wake_duration": int,
+    "width": int,
+    "height": int,
+    "charging": bool,
+    "image_cached": bool,
+    "display_compatibility": bool,
+    "display_profile": str,
+    "command": str,
+    "touch_bar": str,
+    "sleep_start_at": time | None,
+    "sleep_stop_at": time | None,
+    "synced_at": AwareDatetime | None,
+    "created_at": AwareDatetime,
+    "updated_at": AwareDatetime,
 }
 
 
@@ -150,6 +184,12 @@ def test_device_preserves_pinned_response_data_and_redacts_api_key() -> None:
     assert device.created_at.utcoffset() is not None
     assert device.upstream_added == "kept"
     assert "device-secret" not in repr(device)
+
+
+def test_device_declares_the_complete_pinned_response_schema() -> None:
+    assert {
+        name: field.annotation for name, field in Device.model_fields.items()
+    } == DEVICE_FIELD_TYPES
 
 
 def test_device_patch_serializes_a_positive_playlist_assignment() -> None:
