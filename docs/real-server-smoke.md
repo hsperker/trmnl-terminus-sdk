@@ -19,6 +19,18 @@ The runner prints no configured URL, email, password, or tokens. It gives every
 resource a random suffix and deletes all created resources even when an assertion
 fails. Cleanup failure makes the run fail.
 
+## Latest developer evidence
+
+On 2026-09-08, the automated smoke passed against Terminus commit
+`2d91851b2c038f9964ffb066e4a765b3e88121d2`. A separate reversible check assigned
+the generated playlist to one physical device, and the rendered “SDK DEVICE
+PROOF” screen was visually confirmed. The device's prior playlist assignment was
+restored, and a follow-up query found no SDK-prefixed screens or playlists.
+
+That Terminus revision is an untagged commit after 0.71.0. This is developer
+evidence only; it is not the release proof required against a clean 0.71.0
+instance with controlled session settings.
+
 ## Developer evidence
 
 An existing server can prove that the user-facing path works in that deployment.
