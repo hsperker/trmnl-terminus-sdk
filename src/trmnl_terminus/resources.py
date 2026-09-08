@@ -15,7 +15,16 @@ from .errors import (
     TerminusUnexpectedResponseError,
     TerminusValidationError,
 )
-from .models import Model, Playlist, PlaylistCreate, PlaylistPatch, Screen, ScreenCreate
+from .models import (
+    Device,
+    DevicePatch,
+    Model,
+    Playlist,
+    PlaylistCreate,
+    PlaylistPatch,
+    Screen,
+    ScreenCreate,
+)
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -30,6 +39,29 @@ class ModelsManager:
     def list(self) -> list[Model]:
         response = self._client.request("GET", "/api/models")
         return _decode_list(response, Model)
+
+
+class DevicesManager:
+    def __init__(self, client: TerminusClient) -> None:
+        self._client = client
+
+    def list(self) -> list[Device]:
+        response = self._client.request("GET", "/api/devices")
+        return _decode_list(response, Device)
+
+    def get(self, device_id: int) -> Device:
+        _require_positive_id(device_id)
+        response = self._client.request("GET", f"/api/devices/{device_id}")
+        return _decode_one(response, Device)
+
+    def update(self, device_id: int, request: DevicePatch) -> Device:
+        _require_positive_id(device_id)
+        response = self._client.request(
+            "PATCH",
+            f"/api/devices/{device_id}",
+            json={"device": request.to_payload()},
+        )
+        return _decode_one(response, Device)
 
 
 class ScreensManager:
