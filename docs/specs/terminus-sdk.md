@@ -277,6 +277,12 @@ the request was not accepted for lack of valid credentials. No response other
 than 401 triggers replay. Transport failures, 408, 429, and 5xx responses are
 never retried by v0.1.
 
+This replay rule depends on Terminus rejecting authentication before invoking a
+resource action. Recheck that ordering at every supported tag. The real-server
+smoke test must prove that a rejected first POST creates exactly one resource
+after authentication recovery. If that cannot be proved, do not replay POST or
+PATCH automatically.
+
 There is no background thread or timer. Authentication happens lazily on use.
 
 ## Native HTTP contract
@@ -329,24 +335,33 @@ No manager synthesizes a missing native endpoint. In particular,
 | `synced_at` | `datetime | None` |
 | `created_at`, `updated_at` | `datetime` |
 
-`DeviceCreate` requires `model_id: int` and `playlist_id: int | None`. It may
-also contain these fields with the types used by `Device`:
+`DeviceCreate` requires `model_id: int` and `playlist_id: int | None`. Its
+optional fields are:
 
-```text
-label, mac_address, api_key, firmware_profile, firmware_update,
-firmware_reset, firmware_version, wifi_band, wifi_signal, battery_charge,
-battery_voltage, charging, refresh_rate, image_cached, image_timeout,
-wake_reason, wake_duration, width, height, display_compatibility,
-display_profile, command, touch_bar, sleep_start_at, sleep_stop_at, synced_at
-```
+| Fields | Request type |
+| --- | --- |
+| `label`, `mac_address`, `firmware_version`, `wake_reason`, `display_profile`, `command`, `touch_bar` | `str` |
+| `api_key` | `SecretStr` |
+| `firmware_profile`, `firmware_update`, `firmware_reset`, `display_compatibility` | `bool` |
+| `charging`, `image_cached` | `bool | None` |
+| `wifi_band`, `battery_charge`, `battery_voltage` | `float` |
+| `wifi_signal`, `refresh_rate`, `image_timeout`, `width`, `height` | `int` |
+| `wake_duration` | `int | None` |
+| `sleep_start_at`, `sleep_stop_at` | `time | None` |
+| `synced_at` | `datetime | None` |
+
+Only the fields whose request type includes `None` may be serialized as JSON
+null. Other optional fields must be omitted instead. Serialize `time` and
+`datetime` values as RFC 3339 strings.
 
 Do not expose `id`, `created_at`, or `updated_at` as create fields. Do not fill
 server-generated defaults such as MAC address, API key, or refresh rate.
 Secret values are unwrapped only while constructing the outbound JSON body; the
 serialized body must contain the real API key, not Pydantic's redaction marker.
 
-Match the pinned request schema's numeric invariants: `refresh_rate > 0`,
-`image_timeout >= 0`, `battery_charge >= 0`, and `wifi_band >= 0`.
+Match the pinned request schema's invariants: `refresh_rate > 0`,
+`image_timeout >= 0`, `battery_charge >= 0`, `wifi_band >= 0`, an uppercase
+colon-separated MAC address, and a three-component numeric firmware version.
 
 `DevicePatch` makes the same fields optional, including `model_id`. It accepts
 `playlist_id: int` but not `None`, because the pinned PATCH schema cannot detach
@@ -634,15 +649,35 @@ Mocked HTTP tests must prove:
 26. cookies received during login never appear on resource, raw, or download
     requests.
 
+## First implementation checkpoint
+
+Build one end-to-end path before completing the manager matrix. The first
+checkpoint is login, model listing, playlist creation, HTML screen creation,
+screen retrieval, rendered-image download, playlist update, and cleanup against
+a real Terminus server. It may be rough, but it must use the public SDK surface.
+After this path works, fill in the remaining typed operations and mocked edge
+cases. Do not postpone the first real-server run until release preparation.
+
 ## Real-server release smoke test
 
 Mocks do not prove compatibility. A release is blocked until a smoke test passes
 against a disposable Terminus instance built from the proposed supported tag's
 resolved commit.
 
-The environment must contain a verified test account and at least one usable
-model. Configure a short access-token lifetime so refresh rotation can be
-observed without a long wait.
+The release workflow must start a clean Terminus instance from the proposed tag
+and resolved commit. Its setup must create the first account through Terminus's
+supported registration flow so the account is verified, and must confirm that
+at least one usable model exists. Keep credentials in environment variables;
+never write them to tracked files or command output.
+
+Configure a short access-token lifetime so refresh rotation can be observed
+without a long wait. Set `API_ACCESS_TOKEN_PERIOD`, `SESSION_LIFETIME_LIMIT`, and
+`SESSION_INACTIVITY_LIMIT` to compatible test values; changing only the access
+token period does not reproduce the supported session behavior.
+
+A developer smoke test may target an existing server. It must not claim release
+compatibility unless the server's tag and resolved commit are independently
+verified.
 
 The smoke test must:
 
@@ -654,8 +689,10 @@ The smoke test must:
 6. update the playlist with the screen, read it back, and verify order;
 7. allow the access token to enter the refresh window, make another authenticated
    request, and prove that both tokens rotated;
-8. delete the created screen and playlist in `finally` cleanup;
-9. fail the run if cleanup fails.
+8. send a playlist-creation POST first with rejected authentication, recover,
+   and prove that exactly one uniquely named playlist was created;
+9. delete all created screens and playlists in `finally` cleanup;
+10. fail the run if cleanup fails.
 
 The test may be skipped in ordinary local test runs. The release workflow must
 run it with:
