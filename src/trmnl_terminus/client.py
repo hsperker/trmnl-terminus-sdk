@@ -48,6 +48,11 @@ class TerminusClient:
             verify=verify,
             follow_redirects=False,
         )
+        from .resources import ModelsManager, PlaylistsManager, ScreensManager
+
+        self.models = ModelsManager(self)
+        self.screens = ScreensManager(self)
+        self.playlists = PlaylistsManager(self)
         self._closed = False
 
     def __enter__(self) -> Self:
