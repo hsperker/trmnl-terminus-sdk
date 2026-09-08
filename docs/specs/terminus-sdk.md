@@ -1,10 +1,10 @@
-# TRMNL Terminus Python SDK v0.1
+# TRMNL Terminus Python SDK
 
 ## Goal
 
 Build a small, strongly typed Python SDK for the current Terminus Server API.
 
-The SDK must make the common operations easy and predictable while remaining faithful to the actual Terminus HTTP API.
+The SDK must make common operations easy and predictable while remaining faithful to the actual Terminus HTTP API.
 
 It must not invent remote resources or capabilities that Terminus does not expose.
 
@@ -77,9 +77,11 @@ These can be added later without changing the core abstractions.
 5. Preserve unknown response fields for forward compatibility.
 6. Do not automatically retry mutating HTTP requests.
 7. Preserve the original HTTP/problem response on errors.
-8. Authentication/refresh should normally be transparent.
+8. Authentication and token refresh should normally be transparent.
 9. Provide a raw authenticated HTTP escape hatch.
 10. Never claim Terminus supports an endpoint merely because its docs mention it.
+11. The SDK should expose Terminus semantics, not merely mirror JSON payloads.
+12. Higher-level abstractions must be traceable to real Terminus API behavior.
 
 ---
 
@@ -143,6 +145,49 @@ Terminus expects the raw token in the `Authorization` header.
 Default access-token lifetime is approximately 30 minutes.  
 Refresh tokens are documented as valid for 14 days.
 
+### Authentication precedence
+
+For an authenticated request, the SDK should use this precedence:
+
+1. Use an existing access token if it is still sufficiently valid.
+2. Otherwise refresh using the current refresh token.
+3. Otherwise, if credentials are configured, log in again.
+4. Otherwise raise `TerminusAuthenticationError`.
+
+### Proactive refresh
+
+When tokens are configured, inspect the JWT access token's `exp` claim locally.
+
+The SDK does not need to verify the JWT signature for this purpose; it is only using the claim as a local scheduling hint.
+
+Before an authenticated request:
+
+- if the access token is expired, refresh first;
+- if the access token is within a small refresh window of expiration, refresh first;
+- otherwise use the existing access token.
+
+Use a small default refresh skew such as 60 seconds.
+
+Successful refresh:
+
+- replaces the access token;
+- replaces the refresh token;
+- calls the configured `TokenStore`, if any, with the new pair.
+
+A `401` response may trigger one authentication recovery attempt, but 401-driven refresh is a fallback rather than the primary refresh mechanism.
+
+Never retry authentication indefinitely.
+
+### Token-only startup limitation
+
+A client initialized only with `TokenPair` is not a durable credential mechanism.
+
+If it remains unused beyond the refresh token's validity period, it may no longer be able to authenticate.
+
+Long-lived automations should additionally provide `Credentials`, unless Terminus gains a dedicated long-lived service/API-key mechanism.
+
+No background refresh thread or timer is required. Refresh happens lazily when the SDK is next used.
+
 ---
 
 # Client
@@ -155,8 +200,10 @@ TerminusClient(
     *,
     credentials: Credentials | None = None,
     tokens: TokenPair | None = None,
+    token_store: TokenStore | None = None,
     timeout: httpx.Timeout | None = None,
     verify: bool | str | SSLContext = True,
+    refresh_skew_seconds: int = 60,
 )
 ```
 
@@ -165,13 +212,18 @@ Requirements:
 - Normalize base URL by removing trailing `/`.
 - HTTPS certificate verification enabled by default.
 - Lazy authentication is acceptable.
-- Automatically refresh once when an authenticated request receives an authentication failure and a refresh token exists.
-- Retry the original request once after successful refresh.
+- Support startup with credentials, tokens, or both.
+- Existing tokens are preferred when usable.
+- Before authenticated requests, proactively refresh access tokens that are expired or near expiry.
+- Successful refresh replaces both access and refresh tokens.
+- Persist newly rotated tokens through `TokenStore`, if configured.
+- If refresh fails or the refresh token is no longer usable and credentials are configured, transparently re-authenticate once.
+- A `401` may trigger one recovery attempt.
+- Retry the original request at most once after successful auth recovery.
 - Never endlessly retry.
-- If credentials are available and token refresh is impossible/expired, re-login once.
 - Never include passwords/access tokens/refresh tokens in repr/log output.
-- Allow a callback/`TokenStore` protocol so callers can persist rotated tokens.
 - Do not implement built-in plaintext credential/token persistence.
+- Domain objects must not make implicit HTTP calls.
 
 Expose resource managers:
 
@@ -182,6 +234,73 @@ client.screens
 client.playlists
 client.raw
 ```
+
+Also expose:
+
+```python
+client.resolve_uri(relative_or_absolute_uri: str) -> str
+```
+
+for resolving returned Terminus URIs against the configured base URL.
+
+---
+
+# Authentication value objects
+
+## Credentials
+
+```python
+Credentials(
+    email: str,
+    password: SecretStr,
+)
+```
+
+Requirements:
+
+- password is secret/redacted in repr;
+- credentials are durable fallback credentials;
+- credentials are never written to disk by the SDK.
+
+## TokenPair
+
+```python
+TokenPair(
+    access_token: SecretStr,
+    refresh_token: SecretStr,
+)
+```
+
+Requirements:
+
+- both tokens are secret/redacted in repr;
+- the SDK replaces the full pair after refresh;
+- callers should never assume the refresh token is stable.
+
+## TokenStore protocol
+
+Define a minimal persistence hook:
+
+```python
+class TokenStore(Protocol):
+    def save(self, tokens: TokenPair) -> None: ...
+```
+
+The SDK calls `save()` after:
+
+- successful login;
+- successful refresh.
+
+The SDK should not prescribe the storage backend.
+
+Examples may show callers implementing storage via:
+
+- keyring;
+- encrypted application storage;
+- secrets manager;
+- NAS secret store.
+
+Do not provide plaintext file storage as the default example.
 
 ---
 
@@ -316,6 +435,8 @@ model.render_target -> RenderTarget
 
 Do not invent named palette colors. Terminus exposes `default_palette_id` but currently has no Server API for palettes.
 
+`RenderTarget` is not a remote resource. It is a projection of the Terminus `Model`.
+
 ## Screen
 
 Represent:
@@ -396,7 +517,9 @@ Define mutually exclusive source variants:
 
 ```python
 HtmlSource(html: str)
+
 ImageSource(uri: str)
+
 PreprocessedImageSource(uri: str)
 ```
 
@@ -453,6 +576,8 @@ Do **not** sanitize it client-side.
 Terminus currently sanitizes HTML before rendering using its own sanitizer. The SDK should not attempt to duplicate Terminus's changing sanitizer policy.
 
 Document that sanitized HTML can still contain JavaScript/styles/external resources and should therefore not be treated as a security sandbox.
+
+The SDK should treat Terminus as the rendering authority.
 
 ---
 
@@ -665,12 +790,19 @@ Validation errors should expose server-side `errors` if present.
 
 Every exception arising from an HTTP response should preserve:
 
-- status code
-- `ProblemDetails`, if parseable
-- request method/path
-- original `httpx.Response`
+- status code;
+- `ProblemDetails`, if parseable;
+- request method/path;
+- original `httpx.Response`.
 
 Do not reduce errors to strings.
+
+Authentication-specific errors should distinguish at least:
+
+- no usable credentials/tokens available;
+- refresh failed and no credentials fallback exists;
+- login failed;
+- repeated authentication failure after one recovery attempt.
 
 ---
 
@@ -680,11 +812,11 @@ The Terminus Server API is explicitly evolving.
 
 Requirements:
 
-- tolerate unknown JSON response fields
-- preserve unknown fields on models
-- do not reject unknown enum/string values received **from** the server
-- only constrain values we **send** when the current Terminus API has a real invariant
-- provide `client.raw.request()` for new endpoints/fields
+- tolerate unknown JSON response fields;
+- preserve unknown fields on models;
+- do not reject unknown enum/string values received **from** the server;
+- only constrain values we **send** when the current Terminus API has a real invariant;
+- provide `client.raw.request()` for new endpoints/fields.
 
 Example:
 
@@ -724,6 +856,32 @@ pool:    5 seconds
 
 Do not impose a short 10-second timeout on screen rendering requests.
 
+Downloading a rendered image should be explicit I/O:
+
+```python
+data = client.screens.read_bytes(screen)
+client.screens.download(screen, "preview.png")
+```
+
+The SDK should not automatically download images merely because a `Screen` was fetched.
+
+---
+
+# HTML and rendering security model
+
+Terminus sanitizes incoming HTML before rendering, but intentionally permits rich rendering capabilities including HTML, CSS, JavaScript, SVG, and external resources.
+
+Therefore:
+
+- do not implement a second sanitizer in the SDK;
+- do not claim Terminus's sanitizer makes arbitrary hostile HTML safe;
+- do not silently escape entire trusted HTML templates;
+- application code should escape untrusted data before interpolating it into trusted HTML;
+- externally referenced resources must be reachable from the Terminus rendering environment;
+- HTML rendering should be considered executable/trusted rendering input.
+
+The SDK may later add higher-level safe-template helpers, but those are explicitly deferred from v0.1.
+
 ---
 
 # Security requirements
@@ -737,6 +895,8 @@ Do not impose a short 10-second timeout on screen rendering requests.
 - Do not add `verify=False` examples to documentation.
 - Do not implement client-side HTML sanitization and imply it is equivalent to Terminus's rendering policy.
 - Document that Terminus sanitizes HTML but intentionally permits rich HTML/CSS/JS capabilities.
+- Do not persist credentials or tokens unless the caller explicitly supplies a `TokenStore`.
+- Successful refresh must persist the newly rotated refresh token through `TokenStore`, if configured.
 
 ---
 
@@ -769,6 +929,14 @@ client.screens.download(screen)
 ```
 
 clearly performs I/O.
+
+A property such as:
+
+```python
+model.render_target
+```
+
+must be pure and locally derived.
 
 ---
 
@@ -823,25 +991,37 @@ Keep files focused and reasonably small.
 Tests must lock down these known Terminus behaviors:
 
 1. `Authorization` header is raw JWT, not `Bearer`.
-2. Refresh replaces **both** access and refresh tokens.
-3. Models update with `PATCH`, not `PUT`.
-4. `screens.get(id)` does not call `/api/screens/:id`.
-5. `HtmlSource` produces `content`.
-6. `ImageSource` produces `uri` without `preprocessed=true`.
-7. `PreprocessedImageSource` produces `uri` + `preprocessed=true`.
-8. Multiple screen source types cannot be represented.
-9. Dither maps to `mode="dither"`.
-10. Screen response exposes rendered image metadata and URI.
-11. Rendered image URL resolves correctly against base URL.
-12. Playlist item order is preserved.
-13. `playlists.update(label=...)` first reads the existing playlist, then PATCHes with both required `name` and `label`.
-14. `items=None` preserves items.
-15. `items=[]` sends an empty array and clears items.
-16. Device create accepts `playlist_id=None`.
-17. Device patch does not permit `playlist_id=None`.
-18. Unknown response fields survive decoding.
-19. RFC problem errors remain inspectable on SDK exceptions.
-20. Secrets are absent/redacted from repr.
+2. Login stores both access and refresh tokens.
+3. Refresh replaces **both** access and refresh tokens.
+4. Rotated tokens are persisted via `TokenStore`.
+5. A sufficiently valid access token is reused without refresh.
+6. An expired access token is proactively refreshed before the request.
+7. A near-expiry access token is proactively refreshed before the request.
+8. `401` auth recovery happens at most once.
+9. Failed refresh falls back to credentials when configured.
+10. Failed refresh without credentials raises `TerminusAuthenticationError`.
+11. Token-only startup works while the refresh token remains usable.
+12. No background refresh thread/timer is created.
+13. Models update with `PATCH`, not `PUT`.
+14. `screens.get(id)` does not call `/api/screens/:id`.
+15. `HtmlSource` produces `content`.
+16. `ImageSource` produces `uri` without `preprocessed=true`.
+17. `PreprocessedImageSource` produces `uri` + `preprocessed=true`.
+18. Multiple screen source types cannot be represented.
+19. Dither maps to `mode="dither"`.
+20. Screen response exposes rendered image metadata and URI.
+21. Rendered image URL resolves correctly against base URL.
+22. Playlist item order is preserved.
+23. `playlists.update(label=...)` first reads the existing playlist, then PATCHes with both required `name` and `label`.
+24. `items=None` preserves items.
+25. `items=[]` sends an empty array and clears items.
+26. Device create accepts `playlist_id=None`.
+27. Device patch does not permit `playlist_id=None`.
+28. Unknown response fields survive decoding.
+29. RFC problem errors remain inspectable on SDK exceptions.
+30. Secrets are absent/redacted from repr.
+31. Login request bodies are not logged.
+32. Authorization headers are not logged.
 
 ---
 
@@ -859,12 +1039,12 @@ are set.
 
 Read-only integration test:
 
-- login
-- list devices
-- list models
-- list playlists
-- list screens
-- resolve each returned `device.model_id` through `models.get()`
+- login;
+- list devices;
+- list models;
+- list playlists;
+- list screens;
+- resolve each returned `device.model_id` through `models.get()`.
 
 No mutation in default integration tests.
 
@@ -928,19 +1108,46 @@ The README must explain that this changes Terminus state.
 
 The physical TRMNL updates only on its next `/api/display` poll/wake cycle.
 
+## README token-startup example
+
+Also demonstrate that an automation may start from an existing token pair:
+
+```python
+client = TerminusClient(
+    "https://terminus.example.test",
+    tokens=TokenPair(
+        access_token=os.environ["TERMINUS_ACCESS_TOKEN"],
+        refresh_token=os.environ["TERMINUS_REFRESH_TOKEN"],
+    ),
+    token_store=my_token_store,
+)
+```
+
+Document:
+
+- token refresh is transparent;
+- both tokens rotate;
+- the rotated pair must be persisted;
+- token-only startup is not durable if the client stays unused past refresh-token expiry;
+- durable automations should also provide `Credentials` as fallback unless Terminus later provides a dedicated service credential.
+
 ---
 
 # Acceptance criteria
 
 The work is complete when:
 
-- all unit tests pass
-- `mypy` passes
-- `ruff` passes
-- public API is documented
-- no undocumented/native Terminus endpoint has been invented
-- all known documentation-vs-code discrepancies above are covered by tests
-- an HTML screen can be created and its Terminus-rendered image downloaded
-- a screen can be placed in a playlist
-- a device's Model can be resolved into a `RenderTarget`
-- token refresh is transparent and correctly rotates refresh tokens
+- all unit tests pass;
+- `mypy` passes;
+- `ruff` passes;
+- public API is documented;
+- no undocumented/native Terminus endpoint has been invented;
+- all known documentation-vs-code discrepancies above are covered by tests;
+- an HTML screen can be created and its Terminus-rendered image downloaded;
+- a screen can be placed in a playlist;
+- a device's Model can be resolved into a `RenderTarget`;
+- token refresh is transparent and proactive on use;
+- refresh correctly rotates both tokens;
+- rotated tokens can be persisted through `TokenStore`;
+- expired refresh credentials can fall back to username/password when configured;
+- token-only startup behavior and its durability limitation are documented.
