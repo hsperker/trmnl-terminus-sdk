@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time
 
 import pytest
 from pydantic import ValidationError
 
 from trmnl_terminus import (
     Credentials,
+    Device,
+    DevicePatch,
     HtmlSource,
     Model,
     PlaylistPatch,
@@ -14,6 +16,41 @@ from trmnl_terminus import (
     ScreenCreate,
     TokenPair,
 )
+
+DEVICE = {
+    "id": 23,
+    "model_id": 7,
+    "playlist_id": 13,
+    "label": "Office display",
+    "mac_address": "AA:BB:CC:DD:EE:FF",
+    "firmware_version": "1.2.3",
+    "wake_reason": "timer",
+    "api_key": "device-secret",
+    "firmware_profile": True,
+    "firmware_update": False,
+    "firmware_reset": False,
+    "wifi_band": 2.4,
+    "battery_charge": 94.5,
+    "battery_voltage": 4.08,
+    "wifi_signal": -55,
+    "refresh_rate": 900,
+    "image_timeout": 60,
+    "wake_duration": 30,
+    "width": 800,
+    "height": 480,
+    "charging": False,
+    "image_cached": True,
+    "display_compatibility": True,
+    "display_profile": "default",
+    "command": "refresh",
+    "touch_bar": "enabled",
+    "sleep_start_at": "22:00:00",
+    "sleep_stop_at": "07:00:00",
+    "synced_at": "2026-09-08T10:00:00+00:00",
+    "created_at": "2026-09-08T09:00:00+00:00",
+    "updated_at": "2026-09-08T10:00:00+00:00",
+    "upstream_added": "kept",
+}
 
 
 def test_screen_create_serializes_html_source() -> None:
@@ -75,6 +112,61 @@ def test_response_models_preserve_unknown_fields() -> None:
     assert model.future_field == "kept"
     assert isinstance(model.created_at, datetime)
     assert model.created_at.tzinfo is not None
+
+
+def test_response_models_reject_naive_timestamps() -> None:
+    """A missing offset in a server response must fail instead of becoming local time."""
+    with pytest.raises(ValidationError):
+        Model.model_validate(
+            {
+                "id": 1,
+                "default_palette_id": None,
+                "name": "og",
+                "label": "OG",
+                "description": None,
+                "kind": "terminus",
+                "mime_type": "image/png",
+                "colors": 2,
+                "bit_depth": 1,
+                "rotation": 0,
+                "offset_x": 0,
+                "offset_y": 0,
+                "scale_factor": 1.0,
+                "css": {},
+                "width": 800,
+                "height": 480,
+                "created_at": "2026-09-08T10:00:00",
+                "updated_at": "2026-09-08T10:00:00+00:00",
+            }
+        )
+
+
+def test_device_preserves_pinned_response_data_and_redacts_api_key() -> None:
+    device = Device.model_validate(DEVICE)
+
+    assert device.id == 23
+    assert device.playlist_id == 13
+    assert device.sleep_start_at == time(22, 0)
+    assert device.created_at.utcoffset() is not None
+    assert device.upstream_added == "kept"
+    assert "device-secret" not in repr(device)
+
+
+def test_device_patch_serializes_a_positive_playlist_assignment() -> None:
+    assert DevicePatch(playlist_id=13).to_payload() == {"playlist_id": 13}
+
+
+@pytest.mark.parametrize("playlist_id", [0, -1, None])
+def test_device_patch_rejects_non_positive_or_null_playlist_ids(
+    playlist_id: int | None,
+) -> None:
+    with pytest.raises(ValidationError):
+        DevicePatch(playlist_id=playlist_id)
+
+
+def test_device_patch_rejects_unknown_request_fields() -> None:
+    with pytest.raises(ValidationError):
+        DevicePatch(playlist_id=13, label="not supported")
 
 
 def test_model_accepts_null_css_from_terminus_response() -> None:

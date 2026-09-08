@@ -1,6 +1,8 @@
 from .client import TerminusClient
 from .models import (
     Credentials,
+    Device,
+    DevicePatch,
     HtmlSource,
     Model,
     Playlist,
@@ -15,6 +17,8 @@ from .models import (
 
 __all__ = [
     "Credentials",
+    "Device",
+    "DevicePatch",
     "HtmlSource",
     "Model",
     "Playlist",
