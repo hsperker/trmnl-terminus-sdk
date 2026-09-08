@@ -79,11 +79,15 @@ with TerminusClient(os.environ["TERMINUS_BASE_URL"], credentials=credentials) as
         if not isinstance(original_playlist_id, int) or original_playlist_id <= 0:
             raise RuntimeError(
                 "Device has no positive original playlist assignment; refusing to mutate it"
-            )
+        )
 
         device_assignment_started = True
-        client.devices.update(device.id, DevicePatch(playlist_id=playlist.id))
-        # Inspect the temporary display through the device's normal refresh path.
+        assigned_device = client.devices.update(device.id, DevicePatch(playlist_id=playlist.id))
+        if assigned_device.playlist_id != playlist.id:
+            raise RuntimeError("Terminus did not assign the temporary playlist")
+        input(
+            "Wake or manually refresh the device, then press Enter after it shows SDK example: "
+        )
     finally:
         if device_assignment_started:
             restored_device = client.devices.update(
