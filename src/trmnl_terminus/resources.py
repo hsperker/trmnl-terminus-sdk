@@ -245,33 +245,24 @@ def _data(response: httpx.Response) -> Any:
 def _raise_for_status(response: httpx.Response) -> None:
     if response.is_success:
         return
-    problem = None
-    try:
-        problem = response.json()
-    except ValueError:
-        problem = None
     if response.status_code == 404:
         raise TerminusNotFoundError(
             "Terminus returned an error response",
             response=response,
-            problem=problem,
         )
     if response.status_code in {400, 422}:
         raise TerminusValidationError(
             "Terminus returned an error response",
             response=response,
-            problem=problem,
         )
     if response.status_code == 409:
         raise TerminusConflictError(
             "Terminus returned an error response",
             response=response,
-            problem=problem,
         )
     raise TerminusUnexpectedResponseError(
         "Terminus returned an error response",
         response=response,
-        problem=problem,
     )
 
 
