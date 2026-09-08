@@ -195,7 +195,7 @@ List models, create a playlist, create self-contained HTML, fetch the screen, do
 
 - [ ] **Step 4: Exercise rejected-auth POST recovery**
 
-Capture a valid rotated pair through an in-memory `TokenStore`, construct a second client with a deliberately rejected access token plus credentials, create a uniquely named playlist, and assert by listing that exactly one matching playlist exists. If the server returns a redirect instead of 401, fail and report the observed contract mismatch.
+Capture a valid pair through an in-memory `TokenStore`, rotate it once through a raw public call to `/api/jwt` without installing the returned pair, then create a uniquely named playlist with the stale pair. Require an authentication recovery, and assert by listing that exactly one matching playlist exists. Do not use a malformed fake JWT: Terminus reports malformed tokens as bad requests rather than expired authentication.
 
 - [ ] **Step 5: Document disposable and developer modes**
 
