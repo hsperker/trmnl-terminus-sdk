@@ -196,6 +196,14 @@ def test_device_patch_serializes_a_positive_playlist_assignment() -> None:
     assert DevicePatch(playlist_id=13).to_payload() == {"playlist_id": 13}
 
 
+@pytest.mark.parametrize("playlist_id", [True, 1.0, "1"])
+def test_device_patch_rejects_values_that_only_coerce_to_integers(
+    playlist_id: object,
+) -> None:
+    with pytest.raises(ValidationError):
+        DevicePatch(playlist_id=playlist_id)
+
+
 @pytest.mark.parametrize("playlist_id", [0, -1, None])
 def test_device_patch_rejects_non_positive_or_null_playlist_ids(
     playlist_id: int | None,
@@ -207,6 +215,41 @@ def test_device_patch_rejects_non_positive_or_null_playlist_ids(
 def test_device_patch_rejects_unknown_request_fields() -> None:
     with pytest.raises(ValidationError):
         DevicePatch(playlist_id=13, label="not supported")
+
+
+@pytest.mark.parametrize("model_id", [True, 1.0, "1"])
+def test_screen_create_rejects_model_ids_that_only_coerce_to_integers(
+    model_id: object,
+) -> None:
+    with pytest.raises(ValidationError):
+        ScreenCreate(
+            model_id=model_id,
+            name="strict-model-id",
+            label="Strict model ID",
+            source=HtmlSource(html="<h1>strict</h1>"),
+        )
+
+
+@pytest.mark.parametrize("playlist_id", [True, 1.0, "1"])
+def test_screen_create_rejects_playlist_ids_that_only_coerce_to_integers(
+    playlist_id: object,
+) -> None:
+    with pytest.raises(ValidationError):
+        ScreenCreate(
+            model_id=7,
+            name="strict-playlist-id",
+            label="Strict playlist ID",
+            source=HtmlSource(html="<h1>strict</h1>"),
+            playlist_id=playlist_id,
+        )
+
+
+@pytest.mark.parametrize("screen_id", [True, 1.0, "1"])
+def test_playlist_patch_rejects_screen_ids_that_only_coerce_to_integers(
+    screen_id: object,
+) -> None:
+    with pytest.raises(ValidationError):
+        PlaylistPatch(name="strict", label="Strict", screen_ids=[screen_id])
 
 
 def test_model_accepts_null_css_from_terminus_response() -> None:

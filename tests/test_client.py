@@ -212,6 +212,23 @@ def test_client_rejects_non_root_base_url() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://example.com:bad",
+        "http://example.com:99999",
+        "http://exa mple.com",
+        "http://example.com ",
+    ],
+)
+def test_client_rejects_malformed_base_url_during_construction(base_url: str) -> None:
+    with pytest.raises(ValueError, match=r"valid absolute HTTP\(S\) URL"):
+        TerminusClient(
+            base_url,
+            tokens=TokenPair(access_token="opaque", refresh_token="refresh"),
+        )
+
+
 def test_client_rejects_io_after_close() -> None:
     client = TerminusClient(
         BASE_URL,

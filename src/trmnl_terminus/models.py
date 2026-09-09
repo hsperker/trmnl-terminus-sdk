@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import time
-from typing import Any, Protocol
+from typing import Annotated, Any, Protocol
 
 from pydantic import (
     AwareDatetime,
@@ -19,6 +19,9 @@ class _StrictModel(BaseModel):
 
 class _ResponseModel(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+
+_PositiveInt = Annotated[int, Field(strict=True, gt=0)]
 
 
 class Credentials(_StrictModel):
@@ -61,11 +64,11 @@ class HtmlSource(_StrictModel):
 
 
 class ScreenCreate(_StrictModel):
-    model_id: int = Field(gt=0)
+    model_id: _PositiveInt
     name: str = Field(min_length=1)
     label: str = Field(min_length=1)
     source: HtmlSource
-    playlist_id: int | None = Field(default=None, gt=0)
+    playlist_id: _PositiveInt | None = None
 
     def to_payload(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -82,7 +85,7 @@ class ScreenCreate(_StrictModel):
 class PlaylistCreate(_StrictModel):
     name: str = Field(min_length=1)
     label: str = Field(min_length=1)
-    screen_ids: list[int] | None = None
+    screen_ids: list[_PositiveInt] | None = None
 
     @field_validator("screen_ids")
     @classmethod
@@ -103,7 +106,7 @@ class PlaylistPatch(PlaylistCreate):
 
 
 class DevicePatch(_StrictModel):
-    playlist_id: int = Field(gt=0)
+    playlist_id: _PositiveInt
 
     def to_payload(self) -> dict[str, Any]:
         return {"playlist_id": self.playlist_id}

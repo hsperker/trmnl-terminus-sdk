@@ -141,6 +141,8 @@ redirect is an unexpected response.
 `base_url` must be an absolute `http` or `https` URL containing only scheme,
 host, optional port, and an optional trailing slash. Reject user information,
 query strings, fragments, and non-root paths. Strip the trailing slash.
+Reject malformed ports, invalid HTTPX URL syntax, and whitespace during client
+construction rather than leaking a delayed `httpx.InvalidURL` from a request.
 
 Terminus is served at the origin root in the supported configuration. Rejecting
 path prefixes avoids ambiguous URL joining.
@@ -186,7 +188,9 @@ an object. A successful delete may return `data: {}`; managers normalize that to
 `None`.
 
 Positive resource IDs are required for public manager arguments and outbound ID
-fields. Empty names and labels are rejected locally.
+fields. Outbound ID fields are strict integers: reject booleans, floats, and
+numeric strings rather than coercing them. Empty names and labels are rejected
+locally.
 
 ## Authentication
 

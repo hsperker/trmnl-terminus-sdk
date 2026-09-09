@@ -256,8 +256,15 @@ class TerminusClient:
 
 
 def _normalize_base_url(base_url: str) -> str:
-    parsed = urlsplit(base_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if any(character.isspace() for character in base_url):
+        raise ValueError("base_url must be a valid absolute HTTP(S) URL")
+    try:
+        parsed = urlsplit(base_url)
+        validated_url = httpx.URL(base_url)
+        _ = parsed.port
+    except (ValueError, httpx.InvalidURL) as error:
+        raise ValueError("base_url must be a valid absolute HTTP(S) URL") from error
+    if validated_url.scheme not in {"http", "https"} or not validated_url.host:
         raise ValueError("base_url must be an absolute HTTP(S) URL")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("base_url must contain only an origin")
