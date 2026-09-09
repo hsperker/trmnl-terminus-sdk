@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trmnl-terminus"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Synchronous Python SDK for Terminus Server"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,6 +21,9 @@ dev = [
   "respx>=0.22,<1",
   "ruff>=0.6,<1",
 ]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.superpowers"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/trmnl_terminus"]
@@ -39,4 +42,3 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 python_version = "3.12"
 strict = true
 packages = ["trmnl_terminus"]
-

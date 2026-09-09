@@ -6,9 +6,10 @@ Status: implementation specification for SDK v0.1.
 
 Build a small synchronous Python SDK for automating a Terminus Server.
 
-A user must be able to authenticate, manage devices, models, screens, and
-playlists, and download a rendered screen without writing HTTP or JSON plumbing.
-The SDK must remain a thin, typed representation of the real Terminus API.
+A user must be able to authenticate, inspect models, create rendered screens and
+playlists, assign a playlist to an existing device, and download a rendered
+screen without writing HTTP or JSON plumbing. The SDK must remain a thin, typed
+representation of the real Terminus API.
 
 Distribution name: `trmnl-terminus`
 
@@ -27,7 +28,7 @@ commit:     e0cf90d8ef6d7bc16dfbac8ebab910a9fda9de56
 Pinning both values gives users a recognizable release and gives tests an
 immutable source revision. Terminus `main` later added `GET /api/screens/:id`,
 but tag `0.71.0` does not contain that route. SDK v0.1 therefore exposes the
-native screen list, create, patch, and delete operations only. Do not synthesize
+native screen list, create, and delete operations only. Do not synthesize
 `screens.get()` by listing every screen, and do not claim support for an
 unreleased commit merely to expose that convenience method.
 
@@ -78,7 +79,10 @@ them.
 Implement:
 
 - login, refresh-token rotation, and one-shot authentication recovery;
-- native CRUD for devices, models, screens, and playlists;
+- device listing, lookup, and playlist assignment;
+- model listing;
+- HTML screen listing, creation, deletion, and rendered-image access;
+- playlist listing, lookup, creation, replacement, and deletion;
 - explicit rendered-image reads and downloads;
 - RFC Problem Details errors;
 - a raw HTTP escape hatch for unsupported Server API endpoints.
@@ -86,6 +90,9 @@ Implement:
 Defer:
 
 - firmware and firmware device-protocol endpoints;
+- device creation, deletion, and updates other than playlist assignment;
+- model lookup and mutation;
+- screen updates and URI-based screen sources;
 - extensions, designs, plugins, palettes, and the cloud webhook API;
 - template authoring and local HTML rendering;
 - async and background token refresh;
@@ -291,17 +298,10 @@ their attributes under the singular resource name shown in the Payload column.
 | --- | --- | --- | --- |
 | `devices.list()` | `GET /api/devices` | none | `list[Device]` |
 | `devices.get(id)` | `GET /api/devices/:id` | none | `Device` |
-| `devices.create(request)` | `POST /api/devices` | `{"device": ...}` | `Device` |
 | `devices.update(id, request)` | `PATCH /api/devices/:id` | `{"device": ...}` | `Device` |
-| `devices.delete(id)` | `DELETE /api/devices/:id` | none | `Device | None` |
 | `models.list()` | `GET /api/models` | none | `list[Model]` |
-| `models.get(id)` | `GET /api/models/:id` | none | `Model` |
-| `models.create(request)` | `POST /api/models` | `{"model": ...}` | `Model` |
-| `models.update(id, request)` | `PATCH /api/models/:id` | `{"model": ...}` | `Model` |
-| `models.delete(id)` | `DELETE /api/models/:id` | none | `Model | None` |
 | `screens.list()` | `GET /api/screens` | none | `list[Screen]` |
 | `screens.create(request)` | `POST /api/screens` | `{"screen": ...}` | `Screen` |
-| `screens.update(id, request)` | `PATCH /api/screens/:id` | `{"screen": ...}` | `Screen` |
 | `screens.delete(id)` | `DELETE /api/screens/:id` | none | `Screen | None` |
 | `playlists.list()` | `GET /api/playlists` | none | `list[Playlist]` |
 | `playlists.get(id)` | `GET /api/playlists/:id` | none | `Playlist` |
@@ -331,37 +331,15 @@ No manager synthesizes a missing native endpoint. In particular, v0.1 has no
 | `synced_at` | `datetime | None` |
 | `created_at`, `updated_at` | `datetime` |
 
-`DeviceCreate` requires `model_id: int` and `playlist_id: int | None`. Its
-optional fields are:
+`DevicePatch` contains one required field: `playlist_id: int`. IDs must be
+positive. Terminus 0.71.0 accepts many other device updates, but v0.1 exposes
+only the assignment operation used by the demonstrated workflow. The pinned
+PATCH schema rejects `playlist_id: null`, so the SDK cannot detach a playlist.
+Callers must preserve the prior integer playlist ID when a temporary assignment
+needs to be restored.
 
-| Fields | Request type |
-| --- | --- |
-| `label`, `mac_address`, `firmware_version`, `wake_reason`, `display_profile`, `command`, `touch_bar` | `str` |
-| `api_key` | `SecretStr` |
-| `firmware_profile`, `firmware_update`, `firmware_reset`, `display_compatibility` | `bool` |
-| `charging`, `image_cached` | `bool | None` |
-| `wifi_band`, `battery_charge`, `battery_voltage` | `float` |
-| `wifi_signal`, `refresh_rate`, `image_timeout`, `width`, `height` | `int` |
-| `wake_duration` | `int | None` |
-| `sleep_start_at`, `sleep_stop_at` | `time | None` |
-| `synced_at` | `datetime | None` |
-
-Only the fields whose request type includes `None` may be serialized as JSON
-null. Other optional fields must be omitted instead. Serialize `time` and
-`datetime` values as RFC 3339 strings.
-
-Do not expose `id`, `created_at`, or `updated_at` as create fields. Do not fill
-server-generated defaults such as MAC address, API key, or refresh rate.
-Secret values are unwrapped only while constructing the outbound JSON body; the
-serialized body must contain the real API key, not Pydantic's redaction marker.
-
-Match the pinned request schema's invariants: `refresh_rate > 0`,
-`image_timeout >= 0`, `battery_charge >= 0`, `wifi_band >= 0`, an uppercase
-colon-separated MAC address, and a three-component numeric firmware version.
-
-`DevicePatch` makes the same fields optional, including `model_id`. It accepts
-`playlist_id: int` but not `None`, because the pinned PATCH schema cannot detach
-a playlist. It must contain at least one field.
+Changing the assignment does not wake a physical device. The new playlist is
+used on the device's next scheduled poll, power cycle, or manual refresh.
 
 ### Model
 
@@ -381,29 +359,9 @@ a playlist. It must contain at least one field.
 The response permits `css: null`; this occurs on the deployed Terminus server
 even though model create and patch bodies use an object when `css` is present.
 
-`ModelCreate` requires non-empty `name` and `label`. It may contain:
-
-```python
-description: str | None
-default_palette_id: int | None
-mime_type: str
-colors: int
-bit_depth: int
-rotation: int
-offset_x: int
-offset_y: int
-scale_factor: float
-css: dict[str, Any]
-width: int
-height: int
-```
-
-Omitted fields use Terminus defaults. `kind` is server-assigned and is not an
-outbound field.
-
-`ModelPatch` contains any non-empty subset of the `ModelCreate` fields. `name`
-and `label` are optional during patch. Use `PATCH`, despite the stale `PUT`
-example in upstream documentation.
+Models are read-only in SDK v0.1. `models.list()` supplies the model ID required
+to render a screen. Model lookup and mutation remain available through the raw
+HTTP escape hatch until a concrete consumer justifies typed methods.
 
 ### Screen
 
@@ -420,19 +378,7 @@ example in upstream documentation.
 Rendered metadata is nullable because the pinned database permits a screen with
 empty image data and the serializer omits metadata in that case.
 
-Define mutually exclusive source values:
-
-```python
-HtmlSource(html: str)
-ImageSource(uri: str)
-PreprocessedImageSource(uri: str)
-```
-
-Empty HTML and empty URIs are invalid. Define the outbound-only enum:
-
-```python
-ScreenProcessing.DITHER
-```
+Define `HtmlSource(html: str)`. Empty HTML is invalid.
 
 `ScreenCreate` requires:
 
@@ -440,29 +386,13 @@ ScreenProcessing.DITHER
 model_id: int
 name: str
 label: str
-source: HtmlSource | ImageSource | PreprocessedImageSource
+source: HtmlSource
 playlist_id: int | None = None
-processing: ScreenProcessing | None = None
 ```
 
-For `ScreenCreate`, `playlist_id=None` and `processing=None` mean omission and
-are not serialized. Terminus does not accept explicit nulls for these fields.
-
-`ScreenPatch` requires `source`. It may also contain `model_id`, `name`, `label`,
-and `processing`. The pinned server's patch action accepts those keys as
-optional but its upserter cannot complete without `content` or `uri`; the SDK
-therefore makes the real invariant explicit.
-
-Serialize sources as follows:
-
-| Source | Wire members |
-| --- | --- |
-| `HtmlSource` | `content=<html>` |
-| `ImageSource` | `uri=<uri>`; omit `preprocessed` |
-| `PreprocessedImageSource` | `uri=<uri>, preprocessed=true` |
-
-`ScreenProcessing.DITHER` serializes as `mode="dither"`. Do not invent other
-modes. Do not send `file_name`; the pinned API action does not accept it.
+For `ScreenCreate`, `playlist_id=None` means omission. Terminus does not accept
+an explicit null. Serialize the source as `content=<html>`. Do not send
+`file_name`; the pinned API action does not accept it.
 
 Send HTML unchanged. Terminus owns rendering and sanitization. The SDK must not
 claim that Terminus makes hostile HTML safe: rendering intentionally permits
@@ -472,7 +402,6 @@ untrusted values before interpolating them into trusted templates.
 ### Rendered-image I/O
 
 ```python
-client.resolve_uri(uri: str) -> str
 client.screens.read_bytes(screen: Screen, *, allow_cross_origin: bool = False) -> bytes
 client.screens.download(
     screen: Screen,
@@ -482,8 +411,8 @@ client.screens.download(
 ) -> Path
 ```
 
-`resolve_uri()` is pure. It resolves relative URIs against `base_url` and leaves
-absolute HTTP(S) URIs absolute. It rejects other schemes.
+URI resolution is internal. Relative URIs resolve against `base_url`; absolute
+HTTP(S) URIs remain absolute, and other schemes are rejected.
 
 Image reads are explicit unauthenticated GETs. Never attach the Terminus
 `Authorization` header to an upload URI. By default, reject an absolute URI whose
@@ -513,13 +442,9 @@ updated_at: datetime
 items: list[PlaylistItem]
 ```
 
-Define outbound `PlaylistMode.AUTOMATIC` and `PlaylistMode.MANUAL`. Preserve
-unknown mode strings received from the server.
-
 `PlaylistCreate` requires non-empty `name` and `label`. Optional fields are:
 
 ```python
-mode: PlaylistMode
 screen_ids: list[int]
 ```
 
@@ -531,15 +456,13 @@ creates a playlist with no items; an empty list has the same result.
 pinned API. It may also contain:
 
 ```python
-mode: PlaylistMode
-current_item_id: int
 screen_ids: list[int]
 ```
 
 The SDK does not issue a preliminary GET to invent partial update semantics.
 Omitted `screen_ids` preserves items. An empty list replaces them with no items.
-Do not send `current_item_id` and `screen_ids` together: replacing items creates
-new PlaylistItem IDs, making the supplied current ID ambiguous.
+Playlist mode and current-item mutation are deferred; response values remain
+visible on `Playlist`.
 
 ## Raw HTTP
 
@@ -630,33 +553,30 @@ Mocked HTTP tests must prove:
 11. no background thread or timer is created;
 12. every manager uses the method, route, wrapper, and response shape in the
     native HTTP contract table;
-13. screen source variants serialize exactly as specified and cannot overlap;
-14. screen patch requires a source;
-15. playlist order is preserved, omission preserves items, and an empty list
+13. HTML screen creation serializes exactly as specified;
+14. playlist order is preserved, omission preserves items, and an empty list
     clears them;
-16. playlist update makes one PATCH request and no preliminary GET;
-17. device create accepts `playlist_id=None`, while patch rejects it;
-18. models update with PATCH, not PUT;
-19. unknown response fields and unknown response strings survive decoding;
-20. response envelopes, empty delete results, and malformed responses follow
+15. playlist update makes one PATCH request and no preliminary GET;
+16. device update accepts only a positive, non-null `playlist_id` and makes one
+    PATCH request;
+17. unknown response fields and unknown response strings survive decoding;
+18. response envelopes, empty delete results, and malformed responses follow
     the specified behavior;
-21. RFC problem data and validation errors remain inspectable;
-22. secret values are absent from models, exceptions, and captured logs;
-23. image downloads never send authorization, reject cross-origin URLs by
+19. RFC problem data and validation errors remain inspectable;
+20. secret values are absent from models, exceptions, and captured logs;
+21. image downloads never send authorization, reject cross-origin URLs by
     default, do not follow redirects, and replace destinations atomically;
-24. raw authenticated requests reject absolute URLs and conflicting auth;
-25. cookies received during login never appear on resource, raw, or download
+22. raw authenticated requests reject absolute URLs and conflicting auth;
+23. cookies received during login never appear on resource, raw, or download
     requests.
 
 ## First implementation checkpoint
 
-Build one end-to-end path before completing the manager matrix. The first
-checkpoint is login, model listing, playlist creation, HTML screen creation,
-screen-list readback, rendered-image download, playlist update, and cleanup
-against a real Terminus server. It may be rough, but it must use the public SDK
-surface.
-After this path works, fill in the remaining typed operations and mocked edge
-cases. Do not postpone the first real-server run until release preparation.
+The implemented checkpoint covers login, model listing, playlist creation, HTML
+screen creation, screen-list readback, rendered-image download, playlist update,
+and cleanup against a real Terminus server. Before release, extend that public
+SDK path with typed device listing, lookup, temporary playlist assignment,
+physical display confirmation, and restoration.
 
 ## Real-server release smoke test
 
@@ -729,7 +649,9 @@ SDK v0.1 is complete when:
 - no endpoint or remote resource has been invented;
 - the real-server release smoke test passes against the supported tag's resolved
   commit;
-- all four managers match the native HTTP contract table;
+- the typed device-assignment workflow has been displayed on a physical device
+  and the prior assignment restored;
+- all four managers match the deliberately narrow native HTTP contract table;
 - authentication recovery is bounded and token rotation is persisted;
 - transport and persistence failures fail loudly;
 - rendered-image downloads cannot leak the API authorization header;

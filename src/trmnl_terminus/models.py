@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import time
 from typing import Any, Protocol
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
@@ -101,6 +102,47 @@ class PlaylistPatch(PlaylistCreate):
     pass
 
 
+class DevicePatch(_StrictModel):
+    playlist_id: int = Field(gt=0)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"playlist_id": self.playlist_id}
+
+
+class Device(_ResponseModel):
+    id: int
+    model_id: int
+    playlist_id: int | None
+    label: str | None
+    mac_address: str | None
+    firmware_version: str | None
+    wake_reason: str | None
+    api_key: SecretStr | None
+    firmware_profile: bool
+    firmware_update: bool
+    firmware_reset: bool
+    wifi_band: float
+    battery_charge: float
+    battery_voltage: float
+    wifi_signal: int
+    refresh_rate: int
+    image_timeout: int
+    wake_duration: int
+    width: int
+    height: int
+    charging: bool
+    image_cached: bool
+    display_compatibility: bool
+    display_profile: str
+    command: str
+    touch_bar: str
+    sleep_start_at: time | None
+    sleep_stop_at: time | None
+    synced_at: AwareDatetime | None
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+
 class Model(_ResponseModel):
     id: int
     default_palette_id: int | None
@@ -118,8 +160,8 @@ class Model(_ResponseModel):
     css: dict[str, Any] | None
     width: int
     height: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
 
 
 class Screen(_ResponseModel):
@@ -127,8 +169,8 @@ class Screen(_ResponseModel):
     model_id: int
     label: str
     name: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
     filename: str | None = None
     mime_type: str | None = None
     bit_depth: int | None = None
@@ -142,8 +184,8 @@ class PlaylistItem(_ResponseModel):
     id: int
     screen_id: int
     position: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
 
 
 class Playlist(_ResponseModel):
@@ -152,6 +194,6 @@ class Playlist(_ResponseModel):
     label: str
     current_item_id: int | None
     mode: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
     items: list[PlaylistItem]

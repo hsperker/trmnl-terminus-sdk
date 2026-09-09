@@ -15,7 +15,16 @@ from .errors import (
     TerminusUnexpectedResponseError,
     TerminusValidationError,
 )
-from .models import Model, Playlist, PlaylistCreate, PlaylistPatch, Screen, ScreenCreate
+from .models import (
+    Device,
+    DevicePatch,
+    Model,
+    Playlist,
+    PlaylistCreate,
+    PlaylistPatch,
+    Screen,
+    ScreenCreate,
+)
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -30,6 +39,29 @@ class ModelsManager:
     def list(self) -> list[Model]:
         response = self._client.request("GET", "/api/models")
         return _decode_list(response, Model)
+
+
+class DevicesManager:
+    def __init__(self, client: TerminusClient) -> None:
+        self._client = client
+
+    def list(self) -> list[Device]:
+        response = self._client.request("GET", "/api/devices")
+        return _decode_list(response, Device)
+
+    def get(self, device_id: int) -> Device:
+        _require_positive_id(device_id)
+        response = self._client.request("GET", f"/api/devices/{device_id}")
+        return _decode_one(response, Device)
+
+    def update(self, device_id: int, request: DevicePatch) -> Device:
+        _require_positive_id(device_id)
+        response = self._client.request(
+            "PATCH",
+            f"/api/devices/{device_id}",
+            json={"device": request.to_payload()},
+        )
+        return _decode_one(response, Device)
 
 
 class ScreensManager:
@@ -213,33 +245,24 @@ def _data(response: httpx.Response) -> Any:
 def _raise_for_status(response: httpx.Response) -> None:
     if response.is_success:
         return
-    problem = None
-    try:
-        problem = response.json()
-    except ValueError:
-        problem = None
     if response.status_code == 404:
         raise TerminusNotFoundError(
             "Terminus returned an error response",
             response=response,
-            problem=problem,
         )
     if response.status_code in {400, 422}:
         raise TerminusValidationError(
             "Terminus returned an error response",
             response=response,
-            problem=problem,
         )
     if response.status_code == 409:
         raise TerminusConflictError(
             "Terminus returned an error response",
             response=response,
-            problem=problem,
         )
     raise TerminusUnexpectedResponseError(
         "Terminus returned an error response",
         response=response,
-        problem=problem,
     )
 
 

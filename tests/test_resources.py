@@ -8,6 +8,7 @@ import pytest
 import respx
 
 from trmnl_terminus import (
+    DevicePatch,
     HtmlSource,
     PlaylistCreate,
     PlaylistPatch,
@@ -75,6 +76,41 @@ PLAYLIST = {
             "updated_at": NOW,
         }
     ],
+}
+
+DEVICE = {
+    "id": 23,
+    "model_id": 7,
+    "playlist_id": 13,
+    "label": "Office display",
+    "mac_address": "AA:BB:CC:DD:EE:FF",
+    "firmware_version": "1.2.3",
+    "wake_reason": "timer",
+    "api_key": "device-secret",
+    "firmware_profile": True,
+    "firmware_update": False,
+    "firmware_reset": False,
+    "wifi_band": 2.4,
+    "battery_charge": 94.5,
+    "battery_voltage": 4.08,
+    "wifi_signal": -55,
+    "refresh_rate": 900,
+    "image_timeout": 60,
+    "wake_duration": 30,
+    "width": 800,
+    "height": 480,
+    "charging": False,
+    "image_cached": True,
+    "display_compatibility": True,
+    "display_profile": "default",
+    "command": "refresh",
+    "touch_bar": "enabled",
+    "sleep_start_at": "22:00:00",
+    "sleep_stop_at": "07:00:00",
+    "synced_at": NOW,
+    "created_at": "2026-09-08T09:00:00+00:00",
+    "updated_at": NOW,
+    "upstream_added": "kept",
 }
 
 
@@ -192,6 +228,67 @@ def test_playlist_lifecycle_uses_one_request_per_operation() -> None:
             "items": [{"screen_id": 11}],
         }
     }
+
+
+@respx.mock
+def test_device_manager_uses_native_routes_and_exact_playlist_assignment_payload() -> None:
+    listing = respx.get(f"{BASE_URL}/api/devices").mock(
+        return_value=httpx.Response(200, json={"data": [DEVICE]})
+    )
+    show = respx.get(f"{BASE_URL}/api/devices/23").mock(
+        return_value=httpx.Response(200, json={"data": DEVICE})
+    )
+    update = respx.patch(f"{BASE_URL}/api/devices/23").mock(
+        return_value=httpx.Response(200, json={"data": DEVICE})
+    )
+
+    with _client() as client:
+        devices = client.devices.list()
+        device = client.devices.get(23)
+        updated = client.devices.update(23, DevicePatch(playlist_id=13))
+
+    assert devices[0].id == device.id == updated.id == 23
+    assert listing.call_count == show.call_count == update.call_count == 1
+    assert listing.calls[0].request.content == b""
+    assert show.calls[0].request.content == b""
+    assert json.loads(update.calls[0].request.content) == {"device": {"playlist_id": 13}}
+
+
+@pytest.mark.parametrize(
+    ("path", "operation", "response", "message"),
+    [
+        ("/api/devices", "list", {"data": {}}, "expected a list"),
+        ("/api/devices/23", "get", {"wrong": DEVICE}, "missing data"),
+    ],
+)
+@respx.mock
+def test_device_manager_rejects_invalid_response_envelopes(
+    path: str,
+    operation: str,
+    response: dict[str, object],
+    message: str,
+) -> None:
+    route = respx.get(f"{BASE_URL}{path}").mock(return_value=httpx.Response(200, json=response))
+
+    with _client() as client, pytest.raises(TerminusUnexpectedResponseError, match=message):
+        if operation == "list":
+            client.devices.list()
+        else:
+            client.devices.get(23)
+
+    assert route.call_count == 1
+
+
+@pytest.mark.parametrize("device_id", [0, -1])
+@respx.mock
+def test_device_manager_rejects_non_positive_ids_before_request(device_id: int) -> None:
+    with _client() as client, pytest.raises(ValueError, match="resource ID must be positive"):
+        client.devices.get(device_id)
+
+    with _client() as client, pytest.raises(ValueError, match="resource ID must be positive"):
+        client.devices.update(device_id, DevicePatch(playlist_id=13))
+
+    assert len(respx.calls) == 0
 
 
 @respx.mock

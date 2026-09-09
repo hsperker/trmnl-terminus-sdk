@@ -48,9 +48,10 @@ class TerminusClient:
             verify=verify,
             follow_redirects=False,
         )
-        from .resources import ModelsManager, PlaylistsManager, ScreensManager
+        from .resources import DevicesManager, ModelsManager, PlaylistsManager, ScreensManager
 
         self.models = ModelsManager(self)
+        self.devices = DevicesManager(self)
         self.screens = ScreensManager(self)
         self.playlists = PlaylistsManager(self)
         self._closed = False

@@ -1,6 +1,20 @@
 from .client import TerminusClient
+from .errors import (
+    ProblemDetails,
+    TerminusAuthenticationError,
+    TerminusConflictError,
+    TerminusError,
+    TerminusNotFoundError,
+    TerminusResponseError,
+    TerminusTokenPersistenceError,
+    TerminusTransportError,
+    TerminusUnexpectedResponseError,
+    TerminusValidationError,
+)
 from .models import (
     Credentials,
+    Device,
+    DevicePatch,
     HtmlSource,
     Model,
     Playlist,
@@ -15,15 +29,27 @@ from .models import (
 
 __all__ = [
     "Credentials",
+    "Device",
+    "DevicePatch",
     "HtmlSource",
     "Model",
     "Playlist",
     "PlaylistCreate",
     "PlaylistItem",
     "PlaylistPatch",
+    "ProblemDetails",
     "Screen",
     "ScreenCreate",
+    "TerminusAuthenticationError",
     "TerminusClient",
+    "TerminusConflictError",
+    "TerminusError",
+    "TerminusNotFoundError",
+    "TerminusResponseError",
+    "TerminusTokenPersistenceError",
+    "TerminusTransportError",
+    "TerminusUnexpectedResponseError",
+    "TerminusValidationError",
     "TokenPair",
     "TokenStore",
 ]
