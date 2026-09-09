@@ -31,8 +31,10 @@ from trmnl_terminus import (
     Credentials,
     DevicePatch,
     HtmlSource,
+    Playlist,
     PlaylistCreate,
     PlaylistPatch,
+    Screen,
     ScreenCreate,
     TerminusClient,
 )
@@ -42,26 +44,39 @@ credentials = Credentials(
     password=SecretStr(os.environ["TERMINUS_PASSWORD"]),
 )
 device_id = int(os.environ["TERMINUS_DEVICE_ID"])
+if device_id <= 0:
+    raise ValueError("TERMINUS_DEVICE_ID must be positive")
 
 with TerminusClient(os.environ["TERMINUS_BASE_URL"], credentials=credentials) as client:
+    device = client.devices.get(device_id)
+    original_playlist_id = device.playlist_id
+    if not isinstance(original_playlist_id, int) or original_playlist_id <= 0:
+        raise RuntimeError(
+            "Device has no positive original playlist assignment; refusing to mutate it"
+        )
+
     models = client.models.list()
     if not models:
         raise RuntimeError("Terminus has no models; cannot create a screen")
 
-    model = models[0]
-    playlist = client.playlists.create(PlaylistCreate(name="sdk-example", label="SDK example"))
-    screen = client.screens.create(
-        ScreenCreate(
-            model_id=model.id,
-            name="sdk-example-screen",
-            label="SDK example screen",
-            source=HtmlSource(html="<h1>SDK example</h1>"),
-        )
-    )
+    model = next((item for item in models if item.id == device.model_id), None)
+    if model is None:
+        raise RuntimeError("Terminus has no model compatible with the configured device")
 
+    playlist: Playlist | None = None
+    screen: Screen | None = None
     device_assignment_started = False
     restored = False
     try:
+        playlist = client.playlists.create(PlaylistCreate(name="sdk-example", label="SDK example"))
+        screen = client.screens.create(
+            ScreenCreate(
+                model_id=model.id,
+                name="sdk-example-screen",
+                label="SDK example screen",
+                source=HtmlSource(html="<h1>SDK example</h1>"),
+            )
+        )
         client.playlists.update(
             playlist.id,
             PlaylistPatch(
@@ -72,30 +87,27 @@ with TerminusClient(os.environ["TERMINUS_BASE_URL"], credentials=credentials) as
         )
         client.screens.download(screen, Path("sdk-example.png"))
 
-        device = client.devices.get(device_id)
-        original_playlist_id = device.playlist_id
-        if not isinstance(original_playlist_id, int) or original_playlist_id <= 0:
-            raise RuntimeError(
-                "Device has no positive original playlist assignment; refusing to mutate it"
-            )
-
         device_assignment_started = True
-        assigned_device = client.devices.update(device.id, DevicePatch(playlist_id=playlist.id))
+        client.devices.update(device.id, DevicePatch(playlist_id=playlist.id))
+        assigned_device = client.devices.get(device.id)
         if assigned_device.playlist_id != playlist.id:
             raise RuntimeError("Terminus did not assign the temporary playlist")
         input("Wake or manually refresh the device, then press Enter after it shows SDK example: ")
     finally:
         if device_assignment_started:
-            restored_device = client.devices.update(
-                device_id, DevicePatch(playlist_id=original_playlist_id)
-            )
+            client.devices.update(device.id, DevicePatch(playlist_id=original_playlist_id))
+            restored_device = client.devices.get(device.id)
             if restored_device.playlist_id != original_playlist_id:
                 raise RuntimeError("Terminus did not restore the original playlist assignment")
             restored = True
 
         if not device_assignment_started or restored:
-            client.screens.delete(screen.id)
-            client.playlists.delete(playlist.id)
+            try:
+                if screen is not None:
+                    client.screens.delete(screen.id)
+            finally:
+                if playlist is not None:
+                    client.playlists.delete(playlist.id)
 ```
 
 Playlist assignment does not wake a physical device. It takes effect on the
