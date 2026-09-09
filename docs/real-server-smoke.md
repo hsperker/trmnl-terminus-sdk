@@ -53,11 +53,19 @@ bodies, passwords, or tokens.
 
 ## Latest developer evidence
 
-On 2026-09-08, the automated smoke passed against Terminus commit
-`2d91851b2c038f9964ffb066e4a765b3e88121d2`. A separate reversible check assigned
-the generated playlist to one physical device, and the rendered “SDK DEVICE
-PROOF” screen was visually confirmed. The device's prior playlist assignment was
-restored, and a follow-up query found no SDK-prefixed screens or playlists.
+On 2026-09-09, the guarded physical-device proof passed against public Terminus
+commit `2d91851b2c038f9964ffb066e4a765b3e88121d2`. Through the public typed SDK, the
+runner exercised `devices.get()`, `playlists.create()`, `screens.create()`,
+`playlists.update()`, `playlists.get()`, `devices.update()`, and both typed delete
+operations. It read back the temporary and restored assignments with
+`devices.get()`.
+
+After a manual device wake, the user saw `SDK DEVICE PROOF` centered in black on
+a white background within a solid black frame. The runner then exited zero after
+verifying restoration and cleanup. An independent audit through `devices.list()`,
+`screens.list()`, and `playlists.list()` required exactly one device, confirmed a
+non-null current playlist assignment, and found zero screens or playlists with
+the proof prefix.
 
 That Terminus revision is an untagged commit after 0.71.0. This is developer
 evidence only; it is not the release proof required against a clean 0.71.0
