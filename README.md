@@ -7,7 +7,7 @@ the underlying HTTP contract visible.
 
 ## Compatibility
 
-SDK `0.1.x` supports exactly Terminus tag `0.71.0`, commit
+SDK `0.1.x` and `0.2.x` support exactly Terminus tag `0.71.0`, commit
 [`e0cf90d8ef6d7bc16dfbac8ebab910a9fda9de56`](https://github.com/usetrmnl/terminus/commit/e0cf90d8ef6d7bc16dfbac8ebab910a9fda9de56).
 It makes no compatibility claim for Terminus `main`, older releases, or later
 releases.
@@ -95,6 +95,10 @@ TERMINUS_ALLOW_MUTATIONS=1 \
   uv run python examples/render_screen.py rendered-screen.png
 ```
 
+For photos or images with little text, pass `mode="dither"` to
+`ScreenCreate`. Terminus then runs its dither and color-palette conversion
+path. Omit `mode` to keep the default rendering path.
+
 To prove the full path on real hardware, use the guarded
 [`physical-device proof workflow`](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/scripts/run_device_smoke.py).
 It creates a temporary playlist and screen, assigns them to an existing device,
@@ -108,7 +112,7 @@ scheduled poll, power cycle, or manual refresh.
 
 ## Supported API
 
-| Resource | Operations in `0.1` |
+| Resource | Operations in `0.2` |
 | --- | --- |
 | `client.models` | `list()` |
 | `client.devices` | `list()`, `get(id)`, `update(id, DevicePatch(...))` |

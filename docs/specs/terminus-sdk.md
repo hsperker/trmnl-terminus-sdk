@@ -1,6 +1,6 @@
 # TRMNL Terminus Python SDK
 
-Status: implementation specification for SDK v0.1.
+Status: implementation specification for SDK v0.2.
 
 ## Goal
 
@@ -17,7 +17,7 @@ Python import package: `trmnl_terminus`
 
 ## Compatibility contract
 
-SDK v0.1 supports this exact upstream release:
+SDK v0.2 supports this exact upstream release:
 
 ```text
 repository: https://github.com/usetrmnl/terminus
@@ -27,7 +27,7 @@ commit:     e0cf90d8ef6d7bc16dfbac8ebab910a9fda9de56
 
 Pinning both values gives users a recognizable release and gives tests an
 immutable source revision. Terminus `main` later added `GET /api/screens/:id`,
-but tag `0.71.0` does not contain that route. SDK v0.1 therefore exposes the
+but tag `0.71.0` does not contain that route. SDK v0.2 therefore exposes the
 native screen list, create, and delete operations only. Do not synthesize
 `screens.get()` by listing every screen, and do not claim support for an
 unreleased commit merely to expose that convenience method.
@@ -69,7 +69,7 @@ Do not infer Server API endpoints from Web UI routes.
 - `ruff`
 - `mypy`
 
-The v0.1 client is synchronous. It owns one `httpx.Client`, is reusable across
+The v0.2 client is synchronous. It owns one `httpx.Client`, is reusable across
 requests, and is not safe for concurrent use from multiple threads or tasks.
 Async support and concurrent use are deferred until a concrete consumer needs
 them.
@@ -289,7 +289,7 @@ a practical way to invalidate a well-formed access token on demand, so the
 server-side ordering needed to prove mutation replay cannot be verified. A
 caller may inspect the error and retry deliberately. No response other than 401
 triggers authentication recovery. Transport failures, 408, 429, and 5xx
-responses are never retried by v0.1.
+responses are never retried by v0.2.
 
 There is no background thread or timer. Authentication happens lazily on use.
 
@@ -313,7 +313,7 @@ their attributes under the singular resource name shown in the Payload column.
 | `playlists.update(id, request)` | `PATCH /api/playlists/:id` | `{"playlist": ...}` | `Playlist` |
 | `playlists.delete(id)` | `DELETE /api/playlists/:id` | none | `Playlist | None` |
 
-No manager synthesizes a missing native endpoint. In particular, v0.1 has no
+No manager synthesizes a missing native endpoint. In particular, v0.2 has no
 `screens.get(id)` because Terminus 0.71.0 has no screen show route.
 
 ### Device
@@ -336,7 +336,7 @@ No manager synthesizes a missing native endpoint. In particular, v0.1 has no
 | `created_at`, `updated_at` | `datetime` |
 
 `DevicePatch` contains one required field: `playlist_id: int`. IDs must be
-positive. Terminus 0.71.0 accepts many other device updates, but v0.1 exposes
+positive. Terminus 0.71.0 accepts many other device updates, but v0.2 exposes
 only the assignment operation used by the demonstrated workflow. The pinned
 PATCH schema rejects `playlist_id: null`, so the SDK cannot detach a playlist.
 Callers must preserve the prior integer playlist ID when a temporary assignment
@@ -363,7 +363,7 @@ used on the device's next scheduled poll, power cycle, or manual refresh.
 The response permits `css: null`; this occurs on the deployed Terminus server
 even though model create and patch bodies use an object when `css` is present.
 
-Models are read-only in SDK v0.1. `models.list()` supplies the model ID required
+Models are read-only in SDK v0.2. `models.list()` supplies the model ID required
 to render a screen. Model lookup and mutation remain available through the raw
 HTTP escape hatch until a concrete consumer justifies typed methods.
 
@@ -391,12 +391,15 @@ model_id: int
 name: str
 label: str
 source: HtmlSource
+mode: Literal["dither"] | None = None
 playlist_id: int | None = None
 ```
 
-For `ScreenCreate`, `playlist_id=None` means omission. Terminus does not accept
-an explicit null. Serialize the source as `content=<html>`. Do not send
-`file_name`; the pinned API action does not accept it.
+For `ScreenCreate`, `mode=None` and `playlist_id=None` mean omission. Terminus
+does not accept an explicit null for `playlist_id`. `mode="dither"` invokes the
+server's dither and color-palette conversion path; reject every other mode.
+Serialize the source as `content=<html>`. Do not send `file_name`; the pinned
+API action does not accept it.
 
 Send HTML unchanged. Terminus owns rendering and sanitization. The SDK must not
 claim that Terminus makes hostile HTML safe: rendering intentionally permits
@@ -421,7 +424,7 @@ HTTP(S) URIs remain absolute, and other schemes are rejected.
 Image reads are explicit unauthenticated GETs. Never attach the Terminus
 `Authorization` header to an upload URI. By default, reject an absolute URI whose
 origin differs from `base_url`; the caller must opt in with
-`allow_cross_origin=True`. Do not follow redirects in v0.1.
+`allow_cross_origin=True`. Do not follow redirects in v0.2.
 
 Raise `TerminusUnexpectedResponseError` when the screen has no URI or the image
 response is not 2xx. `read_bytes()` returns the complete body. `download()`
@@ -557,7 +560,8 @@ Mocked HTTP tests must prove:
 11. no background thread or timer is created;
 12. every manager uses the method, route, wrapper, and response shape in the
     native HTTP contract table;
-13. HTML screen creation serializes exactly as specified;
+13. HTML screen creation serializes exactly as specified, including optional
+    dither mode, and rejects unknown modes;
 14. playlist order is preserved, omission preserves items, and an empty list
     clears them;
 15. playlist update makes one PATCH request and no preliminary GET;
@@ -645,7 +649,7 @@ credentials if the persisted refresh token becomes unusable.
 
 ## Acceptance criteria
 
-SDK v0.1 is complete when:
+SDK v0.2 is complete when:
 
 - unit and mocked contract tests pass;
 - `mypy` and `ruff` pass;
@@ -660,4 +664,4 @@ SDK v0.1 is complete when:
 - transport and persistence failures fail loudly;
 - rendered-image downloads cannot leak the API authorization header;
 - no deferred projection, alias, async layer, or storage backend has slipped
-  into v0.1.
+  into v0.2.

@@ -149,6 +149,7 @@ def test_screen_create_wraps_exact_payload() -> None:
                 name="codex-smoke",
                 label="Codex Smoke",
                 source=HtmlSource(html="<h1>hello</h1>"),
+                mode="dither",
             )
         )
 
@@ -159,6 +160,7 @@ def test_screen_create_wraps_exact_payload() -> None:
             "name": "codex-smoke",
             "label": "Codex Smoke",
             "content": "<h1>hello</h1>",
+            "mode": "dither",
         }
     }
 

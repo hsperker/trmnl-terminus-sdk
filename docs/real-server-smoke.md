@@ -36,7 +36,7 @@ uv run python scripts/run_device_smoke.py
 ```
 
 Use a positive device ID for a device that already has a playlist. An unassigned
-device cannot be used because SDK v0.1 intentionally cannot restore
+device cannot be used because the SDK intentionally cannot restore
 `playlist_id: null`.
 
 Playlist assignment does not wake a physical device. When the runner says the

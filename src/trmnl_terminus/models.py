@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import time
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import (
     AwareDatetime,
@@ -68,6 +68,7 @@ class ScreenCreate(_StrictModel):
     name: str = Field(min_length=1)
     label: str = Field(min_length=1)
     source: HtmlSource
+    mode: Literal["dither"] | None = None
     playlist_id: _PositiveInt | None = None
 
     def to_payload(self) -> dict[str, Any]:
@@ -79,6 +80,8 @@ class ScreenCreate(_StrictModel):
         }
         if self.playlist_id is not None:
             payload["playlist_id"] = self.playlist_id
+        if self.mode is not None:
+            payload["mode"] = self.mode
         return payload
 
 

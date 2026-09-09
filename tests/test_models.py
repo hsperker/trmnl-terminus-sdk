@@ -103,6 +103,35 @@ def test_screen_create_serializes_html_source() -> None:
     }
 
 
+def test_screen_create_serializes_dither_mode() -> None:
+    request = ScreenCreate(
+        model_id=7,
+        name="photo",
+        label="Photo",
+        source=HtmlSource(html="<img src='photo.jpg'>"),
+        mode="dither",
+    )
+
+    assert request.to_payload() == {
+        "model_id": 7,
+        "name": "photo",
+        "label": "Photo",
+        "content": "<img src='photo.jpg'>",
+        "mode": "dither",
+    }
+
+
+def test_screen_create_rejects_unknown_mode() -> None:
+    with pytest.raises(ValidationError):
+        ScreenCreate(
+            model_id=7,
+            name="photo",
+            label="Photo",
+            source=HtmlSource(html="<img src='photo.jpg'>"),
+            mode="automatic",
+        )
+
+
 def test_playlist_patch_distinguishes_omitted_and_empty_screen_ids() -> None:
     assert "items" not in PlaylistPatch(name="n", label="l").to_payload()
     assert PlaylistPatch(name="n", label="l", screen_ids=[]).to_payload()["items"] == []
