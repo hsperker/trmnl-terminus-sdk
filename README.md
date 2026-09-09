@@ -5,9 +5,6 @@ self-hosted [Terminus](https://github.com/usetrmnl/terminus) server. It handles
 authentication and token rotation, validates requests and responses, and keeps
 the underlying HTTP contract visible.
 
-> **Release status:** `0.1.0` is ready for its first PyPI release but has not
-> been published yet. Install from a source checkout until that release lands.
-
 ## Compatibility
 
 SDK `0.1.x` supports exactly Terminus tag `0.71.0`, commit
@@ -19,7 +16,7 @@ Python 3.12 or newer is required.
 
 ## Install
 
-After the first PyPI release, add the SDK to an uv project:
+Add the SDK to an uv project:
 
 ```sh
 uv add trmnl-terminus
@@ -31,7 +28,7 @@ Or install it with pip:
 python -m pip install trmnl-terminus
 ```
 
-For now, clone this repository and create its locked environment:
+To work from source, clone this repository and create its locked environment:
 
 ```sh
 git clone https://github.com/hsperker/trmnl-terminus-sdk.git

@@ -26,8 +26,7 @@ publisher when the first upload succeeds.
 
 1. Set the version with `uv version <version>` and commit the updated
    `pyproject.toml` and `uv.lock`.
-2. Remove the pre-release notice from `README.md` when preparing `0.1.0`.
-3. Run the same checks as CI:
+2. Run the same checks as CI:
 
    ```sh
    uv sync --locked
@@ -38,8 +37,8 @@ publisher when the first upload succeeds.
    uv build --no-sources
    ```
 
-4. Merge the release commit to `main` and wait for CI to pass.
-5. Create and push an annotated tag whose value matches `pyproject.toml`:
+3. Merge the release commit to `main` and wait for CI to pass.
+4. Create and push an annotated tag whose value matches `pyproject.toml`:
 
    ```sh
    git tag -a v0.1.0 -m v0.1.0
