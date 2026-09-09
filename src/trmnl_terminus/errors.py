@@ -33,9 +33,7 @@ def _parse_problem_details(response: httpx.Response) -> ProblemDetails | None:
 
         raw_status = payload.get("status")
         status = (
-            raw_status
-            if isinstance(raw_status, int) and not isinstance(raw_status, bool)
-            else None
+            raw_status if isinstance(raw_status, int) and not isinstance(raw_status, bool) else None
         )
 
         return ProblemDetails(
@@ -67,9 +65,7 @@ class TerminusResponseError(TerminusError):
         super().__init__(message)
         self.response = response
         self.problem = (
-            problem
-            if problem is not None or response is None
-            else _parse_problem_details(response)
+            problem if problem is not None or response is None else _parse_problem_details(response)
         )
         self.status_code = response.status_code if response is not None else None
         self.request_method = None

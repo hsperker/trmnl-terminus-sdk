@@ -268,9 +268,7 @@ def test_device_manager_rejects_invalid_response_envelopes(
     response: dict[str, object],
     message: str,
 ) -> None:
-    route = respx.get(f"{BASE_URL}{path}").mock(
-        return_value=httpx.Response(200, json=response)
-    )
+    route = respx.get(f"{BASE_URL}{path}").mock(return_value=httpx.Response(200, json=response))
 
     with _client() as client, pytest.raises(TerminusUnexpectedResponseError, match=message):
         if operation == "list":

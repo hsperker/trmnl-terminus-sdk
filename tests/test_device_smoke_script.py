@@ -70,9 +70,7 @@ def test_device_smoke_requires_explicit_mutation_permission() -> None:
 
     assert result.returncode == 2
     assert result.stdout == ""
-    assert result.stderr == (
-        "TERMINUS_ALLOW_DEVICE_MUTATIONS must equal 1; no requests sent\n"
-    )
+    assert result.stderr == ("TERMINUS_ALLOW_DEVICE_MUTATIONS must equal 1; no requests sent\n")
 
 
 @pytest.mark.parametrize("device_id", ["0", "-1", "not-an-integer"])
