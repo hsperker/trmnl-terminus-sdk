@@ -53,19 +53,17 @@ bodies, passwords, or tokens.
 
 ## Latest developer evidence
 
-On 2026-09-09, the guarded device runner completed a programmatic run against
-public Terminus commit `2d91851b2c038f9964ffb066e4a765b3e88121d2`. It used the
-public typed SDK to create and attach a temporary screen and playlist, assign
-that playlist, and verify the assignment by reading it back. The runner received
-an acknowledgment without a user observing the physical display. It exited zero
-after restoring the original non-null assignment and deleting both temporary
-resources.
+On 2026-09-09, the guarded physical-device proof passed against public Terminus
+commit `2d91851b2c038f9964ffb066e4a765b3e88121d2`. Through the public typed SDK, the
+runner created and attached a temporary screen and playlist, assigned the
+playlist, and verified the assignment by reading it back.
 
-An independent audit through `devices.list()`, `screens.list()`, and
-`playlists.list()` required exactly one device, confirmed a non-null current
+After a manual device wake, the user saw the black `SDK DEVICE PROOF` heading
+centered on a white background within a solid black frame. The runner then
+restored and read back the original assignment, deleted both temporary resources,
+and exited zero. An independent audit through `devices.list()`, `screens.list()`,
+and `playlists.list()` required exactly one device, confirmed a non-null current
 playlist assignment, and found zero screens or playlists with the proof prefix.
-Because the display was not observed, this run does not satisfy the physical
-visual gate. Task 7 remains pending.
 
 That Terminus revision is an untagged commit after 0.71.0. This is developer
 evidence only; it is not the release proof required against a clean 0.71.0
