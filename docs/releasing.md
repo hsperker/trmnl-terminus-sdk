@@ -41,8 +41,9 @@ publisher when the first upload succeeds.
 4. Create and push an annotated tag whose value matches `pyproject.toml`:
 
    ```sh
-   git tag -a v0.1.0 -m v0.1.0
-   git push origin v0.1.0
+   version="$(uv version --short)"
+   git tag -a "v${version}" -m "v${version}"
+   git push origin "v${version}"
    ```
 
 The release workflow checks the tag against the package version, reruns the
