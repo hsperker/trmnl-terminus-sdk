@@ -22,6 +22,9 @@ dev = [
   "ruff>=0.6,<1",
 ]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["/.superpowers"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/trmnl_terminus"]
 
