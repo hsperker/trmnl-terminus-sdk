@@ -74,12 +74,13 @@ and never writes them to disk unless you supply a `TokenStore`.
 
 ## Examples
 
-The repository includes two runnable examples:
+The repository includes three runnable examples:
 
 | Example | What it proves | Server changes |
 | --- | --- | --- |
 | [`examples/list_resources.py`](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/examples/list_resources.py) | Lists models, devices, screens, and playlists | None |
 | [`examples/render_screen.py`](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/examples/render_screen.py) | Creates an HTML screen, downloads its rendered image, then deletes the screen | Temporary screen |
+| [`examples/render_photo.py`](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/examples/render_photo.py) | Renders a caller-supplied image URL through Terminus's dither path | Temporary screen |
 
 Run the read-only example after setting the three variables above:
 
@@ -94,6 +95,25 @@ a `finally` block, so cleanup is attempted even when the image download fails:
 TERMINUS_ALLOW_MUTATIONS=1 \
   uv run python examples/render_screen.py rendered-screen.png
 ```
+
+`TERMINUS_ALLOW_MUTATIONS` is a local safety interlock used only by the
+examples. Mutating examples require the exact value `1` before sending a
+request that creates, updates, or deletes server resources. The SDK does not
+read the variable, Terminus never receives it, and setting it grants no
+permissions.
+
+Render an image that the Terminus server can reach over HTTP or HTTPS. Use a
+URL you trust: the renderer fetches it from the server's network.
+
+```sh
+TERMINUS_ALLOW_MUTATIONS=1 \
+  uv run python examples/render_photo.py \
+  "https://example.test/photo.png" rendered-photo.png
+```
+
+The photo example embeds the URL in full-frame HTML, asks Terminus to dither
+the result for the target display palette, downloads the rendered image, and
+deletes its temporary screen in a `finally` block.
 
 For photos or images with little text, pass `mode="dither"` to
 `ScreenCreate`. Terminus then runs its dither and color-palette conversion
@@ -125,6 +145,20 @@ Device updates deliberately support playlist assignment only. Terminus
 one by fetching every screen. The
 [SDK specification](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/docs/specs/terminus-sdk.md)
 defines the complete boundary and wire contract.
+
+## For coding agents
+
+This package targets the self-hosted Terminus Server API, not the hosted
+TRMNL developer platform. Before changing or generating code against it:
+
+- Read the [SDK specification](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/docs/specs/terminus-sdk.md)
+  and honor its Terminus tag and commit pin.
+- Prefer the typed resource managers. Use `client.request(...)` only when the
+  pinned Server API has a real gap.
+- Do not infer Server API routes from browser pages or hosted TRMNL API
+  documentation.
+- Keep credentials outside source code and leave TLS verification enabled.
+- Add public SDK surface only for behavior proven against the pinned server.
 
 ## Errors and secrets
 
