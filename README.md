@@ -72,6 +72,35 @@ with TerminusClient(
 The client logs in on demand. It rotates access and refresh tokens when needed
 and never writes them to disk unless you supply a `TokenStore`.
 
+## Using the SDK with a coding agent
+
+Point your coding agent to this README and describe what the device should
+show. The agent should treat these as constraints:
+
+- This SDK controls a self-hosted Terminus server. It does not target the
+  hosted TRMNL developer platform.
+- Install `trmnl-terminus`, use the typed resource managers, and keep the base
+  URL, email, and password in environment variables or a secret store.
+- Fetch the target device with `client.devices.get(id)` and use its
+  `model_id` in `ScreenCreate`. Do not select the first model returned by the
+  server.
+- Generate finished HTML in the application and submit it as
+  `HtmlSource`. Use `mode="dither"` for photographs and other images that need
+  the device palette.
+- A device display flow is `screens.create(...)` → `playlists.create(...)` or
+  `playlists.update(...)` → `devices.update(id, DevicePatch(...))`.
+- These calls change real server state. For a temporary proof, save the
+  device's original playlist ID, restore it afterward, and delete temporary
+  screens and playlists in cleanup code.
+- Assigning a playlist does not wake the device. The image appears on its next
+  scheduled poll, manual refresh, or power cycle.
+
+Start with the runnable [examples](#examples) and the [supported API](#supported-api).
+Use `client.request(...)` only when the pinned Terminus API has a real gap.
+Hosted TRMNL plugins, Liquid templates, variables, webhooks, OAuth, and cloud
+APIs are outside this SDK. The application owns dynamic data and HTML
+generation; the SDK submits the result to Terminus.
+
 ## Examples
 
 The repository includes three runnable examples:
@@ -151,20 +180,6 @@ one by fetching every screen. The
 [SDK specification](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/docs/specs/terminus-sdk.md)
 defines the complete boundary and wire contract.
 
-## For coding agents
-
-This package targets the self-hosted Terminus Server API, not the hosted
-TRMNL developer platform. Before changing or generating code against it:
-
-- Read the [SDK specification](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/docs/specs/terminus-sdk.md)
-  and honor its Terminus tag and commit pin.
-- Prefer the typed resource managers. Use `client.request(...)` only when the
-  pinned Server API has a real gap.
-- Do not infer Server API routes from browser pages or hosted TRMNL API
-  documentation.
-- Keep credentials outside source code and leave TLS verification enabled.
-- Add public SDK surface only for behavior proven against the pinned server.
-
 ## Errors and secrets
 
 HTTP failures raise typed `TerminusError` subclasses. Server responses that use
@@ -192,6 +207,17 @@ uv build --no-sources
 The test suite uses mocked HTTP boundaries. Live server and physical-device
 checks are separate, guarded workflows because they create and delete real
 resources.
+
+### For coding agents changing this SDK
+
+- Read the [SDK specification](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/docs/specs/terminus-sdk.md)
+  and honor its Terminus tag and commit pin.
+- Prefer the typed resource managers. Use `client.request(...)` only when the
+  pinned Server API has a real gap.
+- Do not infer Server API routes from browser pages or hosted TRMNL API
+  documentation.
+- Keep credentials outside source code and leave TLS verification enabled.
+- Add public SDK surface only for behavior proven against the pinned server.
 
 Maintainers should follow the
 [`release checklist`](https://github.com/hsperker/trmnl-terminus-sdk/blob/main/docs/releasing.md);
