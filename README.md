@@ -88,10 +88,14 @@ Run the read-only example after setting the three variables above:
 uv run python examples/list_resources.py
 ```
 
+Choose the target model ID from that output. Mutating examples require it and
+stop before sending a request when it is missing or invalid.
+
 Rendering requires an explicit mutation opt-in. Remote-screen deletion runs in
 a `finally` block, so cleanup is attempted even when the image download fails:
 
 ```sh
+TERMINUS_MODEL_ID=7 \
 TERMINUS_ALLOW_MUTATIONS=1 \
   uv run python examples/render_screen.py rendered-screen.png
 ```
@@ -106,6 +110,7 @@ Render an image that the Terminus server can reach over HTTP or HTTPS. Use a
 URL you trust: the renderer fetches it from the server's network.
 
 ```sh
+TERMINUS_MODEL_ID=7 \
 TERMINUS_ALLOW_MUTATIONS=1 \
   uv run python examples/render_photo.py \
   "https://example.test/photo.png" rendered-photo.png

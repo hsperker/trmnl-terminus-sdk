@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).parents[1]
 TERMINUS_ENVIRONMENT_PREFIX = "TERMINUS_"
 
@@ -43,6 +45,65 @@ def test_list_resources_names_missing_configuration() -> None:
     assert "TERMINUS_PASSWORD" in result.stderr
 
 
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("render_screen.py", ()),
+        ("render_photo.py", ("https://example.test/photo.png",)),
+    ],
+)
+def test_mutating_examples_require_a_model_id_before_network(
+    name: str,
+    arguments: tuple[str, ...],
+) -> None:
+    result = _run_example(
+        name,
+        {
+            "TERMINUS_BASE_URL": "http://127.0.0.1:9",
+            "TERMINUS_EMAIL": "example@example.test",
+            "TERMINUS_PASSWORD": "not-a-real-secret",
+            "TERMINUS_ALLOW_MUTATIONS": "1",
+        },
+        *arguments,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "Missing required environment variables" in result.stderr
+    assert "TERMINUS_MODEL_ID" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("render_screen.py", ()),
+        ("render_photo.py", ("https://example.test/photo.png",)),
+    ],
+)
+@pytest.mark.parametrize("model_id", ["0", "1.0"])
+def test_mutating_examples_reject_invalid_model_ids_before_network(
+    name: str,
+    arguments: tuple[str, ...],
+    model_id: str,
+) -> None:
+    result = _run_example(
+        name,
+        {
+            "TERMINUS_BASE_URL": "http://127.0.0.1:9",
+            "TERMINUS_EMAIL": "example@example.test",
+            "TERMINUS_PASSWORD": "not-a-real-secret",
+            "TERMINUS_MODEL_ID": model_id,
+            "TERMINUS_ALLOW_MUTATIONS": "1",
+        },
+        *arguments,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "TERMINUS_MODEL_ID must be a positive integer" in result.stderr
+    assert "no requests sent" in result.stderr
+
+
 def test_render_screen_requires_explicit_mutation_opt_in_before_network() -> None:
     result = _run_example(
         "render_screen.py",
@@ -50,6 +111,7 @@ def test_render_screen_requires_explicit_mutation_opt_in_before_network() -> Non
             "TERMINUS_BASE_URL": "https://example.test",
             "TERMINUS_EMAIL": "example@example.test",
             "TERMINUS_PASSWORD": "not-a-real-secret",
+            "TERMINUS_MODEL_ID": "7",
             "TERMINUS_ALLOW_MUTATIONS": "0",
         },
     )
@@ -130,6 +192,7 @@ def test_render_photo_requires_explicit_mutation_opt_in_before_network() -> None
             "TERMINUS_BASE_URL": "https://example.test",
             "TERMINUS_EMAIL": "example@example.test",
             "TERMINUS_PASSWORD": "not-a-real-secret",
+            "TERMINUS_MODEL_ID": "7",
             "TERMINUS_ALLOW_MUTATIONS": "0",
         },
         "https://example.test/photo.png",

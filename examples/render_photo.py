@@ -15,6 +15,7 @@ REQUIRED_ENVIRONMENT = (
     "TERMINUS_BASE_URL",
     "TERMINUS_EMAIL",
     "TERMINUS_PASSWORD",
+    "TERMINUS_MODEL_ID",
 )
 
 
@@ -84,6 +85,16 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+    try:
+        model_id = int(os.environ["TERMINUS_MODEL_ID"])
+    except ValueError:
+        model_id = 0
+    if model_id <= 0:
+        print(
+            "TERMINUS_MODEL_ID must be a positive integer; no requests sent",
+            file=sys.stderr,
+        )
+        return 2
     if os.environ.get("TERMINUS_ALLOW_MUTATIONS") != "1":
         print(
             "TERMINUS_ALLOW_MUTATIONS must equal 1; no requests sent",
@@ -102,12 +113,8 @@ def main() -> int:
         os.environ["TERMINUS_BASE_URL"],
         credentials=credentials,
     ) as client:
-        models = client.models.list()
-        if not models:
-            raise RuntimeError("Terminus has no models; cannot render a photo")
-
         suffix = secrets.token_hex(6)
-        screen = client.screens.create(build_screen_request(models[0].id, image_url, suffix))
+        screen = client.screens.create(build_screen_request(model_id, image_url, suffix))
         try:
             client.screens.download(screen, destination)
         finally:
